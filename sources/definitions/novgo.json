@@ -1,0 +1,79 @@
+{
+  "id": "novgo",
+  "version": 1,
+  "name": "NovGo",
+  "description": "NovGo online free web novels and light fiction",
+  "minimum_engine_version": 1,
+  "match": {
+    "hosts": [
+      "novgo.net",
+      "www.novgo.net"
+    ],
+    "url_patterns": [
+      "https://novgo.net/*.html",
+      "https://www.novgo.net/*.html",
+      "https://novgo.net/*",
+      "https://www.novgo.net/*"
+    ]
+  },
+  "requests": {
+    "default": {
+      "method": "GET",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
+      }
+    }
+  },
+  "novel": {
+    "title": {
+      "selector": "h1.tit, .m-desc h1, .g-tit .tit",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "author": {
+      "selector": ".m-imgtxt .txt .item a[href*='/author/']",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "description": {
+      "selector": "#novel-summary-inner, .m-desc .txt .inner, .m-desc .txt",
+      "type": "html",
+      "transform": ["trim"]
+    },
+    "cover": {
+      "selector": ".m-imgtxt .pic img",
+      "type": "attribute",
+      "attribute": "src",
+      "transform": ["absolute_url"]
+    },
+    "status": {
+      "selector": ".m-imgtxt .item span[title='Status'] + .right a, .m-imgtxt .s1.s2 a",
+      "type": "text",
+      "transform": ["trim"]
+    }
+  },
+  "chapters": {
+    "container": "#idData li, ul.ul-list5 li",
+    "title": {
+      "selector": "a.con, a",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "url": {
+      "selector": "a.con, a",
+      "type": "attribute",
+      "attribute": "href",
+      "transform": ["absolute_url"]
+    }
+  },
+  "chapter": {
+    "content": {
+      "selector": "#chapter-content",
+      "type": "html"
+    },
+    "sanitize": {
+      "remove_tags": ["script", "style", "iframe", "button", "div.ads", "div.ad", "ins"],
+      "allow_tags": ["p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote"]
+    }
+  }
+}

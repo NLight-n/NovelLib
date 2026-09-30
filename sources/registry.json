@@ -1,6 +1,6 @@
 {
-  "version": 2,
-  "updated_at": 1727685000000,
+  "version": 3,
+  "updated_at": 1727709000000,
   "sources": [
     {
       "id": "royalroad",
@@ -19,6 +19,15 @@
       "minimum_engine_version": 1,
       "relative_path": "definitions/scribblehub.json",
       "checksum": "sha256:1cf73858558225cca194cee1eea4db16a7d4230298504eae31a1c0c3bbc2757b"
+    },
+    {
+      "id": "novgo",
+      "version": 1,
+      "name": "NovGo",
+      "description": "NovGo online free web novels and light fiction",
+      "minimum_engine_version": 1,
+      "relative_path": "definitions/novgo.json",
+      "checksum": "sha256:df6968819d3da9cdada0ae4166804aa69aa04af30c6bae85b9cf8b40b3329592"
     }
   ]
 }

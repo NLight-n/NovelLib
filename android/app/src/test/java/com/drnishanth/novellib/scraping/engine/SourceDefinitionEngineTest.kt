@@ -55,4 +55,13 @@ class SourceDefinitionEngineTest {
         assertTrue(engine.matches("https://royalroad.com/fiction/1234/test", rr))
         assertFalse(engine.matches("https://example.com/fiction/123", rr))
     }
+
+    @Test
+    fun testBuiltinNovGoMatches() {
+        val novgo = DefaultSourceDefinitions.NOVGO
+        assertTrue(engine.matches("https://novgo.net/level-eater.html", novgo))
+        assertTrue(engine.matches("https://www.novgo.net/peerless-martial-god.html", novgo))
+        assertTrue(engine.matches("https://novgo.net/level-eater/chapter-0.html", novgo))
+        assertFalse(engine.matches("https://example.com/novel/123", novgo))
+    }
 }

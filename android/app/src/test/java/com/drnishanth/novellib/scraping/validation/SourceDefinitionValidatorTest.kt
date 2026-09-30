@@ -21,6 +21,12 @@ class SourceDefinitionValidatorTest {
     }
 
     @Test
+    fun testValidNovGoDefinition() {
+        val result = SourceDefinitionValidator.validate(DefaultSourceDefinitions.NOVGO)
+        assertTrue("NovGo definition should be valid", result is SourceDefinitionValidator.ValidationResult.Valid)
+    }
+
+    @Test
     fun testRejectIncompatibleEngineVersion() {
         val futureDef = DefaultSourceDefinitions.ROYAL_ROAD.copy(minimumEngineVersion = 99)
         val result = SourceDefinitionValidator.validate(futureDef)

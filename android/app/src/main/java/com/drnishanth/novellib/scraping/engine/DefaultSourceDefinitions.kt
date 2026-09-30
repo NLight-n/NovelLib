@@ -172,5 +172,82 @@ object DefaultSourceDefinitions {
         )
     )
 
-    val BUILTIN_DEFINITIONS: List<SourceDefinition> = listOf(ROYAL_ROAD, SCRIBBLE_HUB)
+    val NOVGO = SourceDefinition(
+        id = "novgo",
+        version = 1,
+        name = "NovGo",
+        description = "NovGo online free web novels and light fiction",
+        minimumEngineVersion = 1,
+        match = SourceMatch(
+            hosts = listOf("novgo.net", "www.novgo.net"),
+            urlPatterns = listOf(
+                "https://novgo.net/*.html",
+                "https://www.novgo.net/*.html",
+                "https://novgo.net/*",
+                "https://www.novgo.net/*"
+            )
+        ),
+        requests = mapOf(
+            "default" to RequestConfig(
+                method = "GET",
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
+                )
+            )
+        ),
+        novel = NovelRules(
+            title = SelectorRule(
+                selector = "h1.tit, .m-desc h1, .g-tit .tit",
+                type = "text",
+                transform = listOf("trim")
+            ),
+            author = SelectorRule(
+                selector = ".m-imgtxt .txt .item a[href*='/author/']",
+                type = "text",
+                transform = listOf("trim")
+            ),
+            description = SelectorRule(
+                selector = "#novel-summary-inner, .m-desc .txt .inner, .m-desc .txt",
+                type = "html",
+                transform = listOf("trim")
+            ),
+            cover = SelectorRule(
+                selector = ".m-imgtxt .pic img",
+                type = "attribute",
+                attribute = "src",
+                transform = listOf("absolute_url")
+            ),
+            status = SelectorRule(
+                selector = ".m-imgtxt .item span[title='Status'] + .right a, .m-imgtxt .s1.s2 a",
+                type = "text",
+                transform = listOf("trim")
+            )
+        ),
+        chapters = ChaptersRules(
+            container = "#idData li, ul.ul-list5 li",
+            title = SelectorRule(
+                selector = "a.con, a",
+                type = "text",
+                transform = listOf("trim")
+            ),
+            url = SelectorRule(
+                selector = "a.con, a",
+                type = "attribute",
+                attribute = "href",
+                transform = listOf("absolute_url")
+            )
+        ),
+        chapter = ChapterRule(
+            content = SelectorRule(
+                selector = "#chapter-content",
+                type = "html"
+            ),
+            sanitize = SanitizeRule(
+                removeTags = listOf("script", "style", "iframe", "button", "div.ads", "div.ad", "ins"),
+                allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
+            )
+        )
+    )
+
+    val BUILTIN_DEFINITIONS: List<SourceDefinition> = listOf(ROYAL_ROAD, SCRIBBLE_HUB, NOVGO)
 }
