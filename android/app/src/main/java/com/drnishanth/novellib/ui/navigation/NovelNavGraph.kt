@@ -1,6 +1,7 @@
 package com.drnishanth.novellib.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -22,11 +23,20 @@ import com.drnishanth.novellib.ui.sources.SourcesScreen
 import com.drnishanth.novellib.ui.sources.SourcesViewModel
 
 @Composable
-fun NovelNavGraph(navController: NavHostController) {
+fun NovelNavGraph(
+    navController: NavHostController,
+    initialNovelId: String? = null
+) {
     val profileRepository = NovelLibApplication.instance.profileRepository
     val activeProfile by profileRepository.activeProfile.collectAsState()
 
     val startDestination = if (activeProfile != null) Screen.Library.route else Screen.Profiles.route
+
+    LaunchedEffect(initialNovelId, activeProfile) {
+        if (activeProfile != null && !initialNovelId.isNullOrBlank()) {
+            navController.navigate(Screen.NovelDetail.createRoute(initialNovelId))
+        }
+    }
 
     NavHost(
         navController = navController,

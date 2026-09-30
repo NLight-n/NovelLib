@@ -56,6 +56,7 @@ class NovelLibApplication : Application() {
             readingProgressDao = database.readingProgressDao(),
             readerPreferencesDao = database.readerPreferencesDao(),
             sourceDefinitionDao = database.sourceDefinitionDao(),
+            notificationDao = database.notificationDao(),
             rollbackManager = rollbackManager,
             downloadManager = downloadManager,
             storagePolicyManager = storagePolicyManager
@@ -65,6 +66,12 @@ class NovelLibApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Initialize Android notification channels
+        com.drnishanth.novellib.core.notifications.NovelNotificationManager.createNotificationChannels(this)
+
+        // Schedule periodic background WorkManager tasks
+        com.drnishanth.novellib.background.WorkScheduler.schedulePeriodicWork(this)
     }
 
     companion object {

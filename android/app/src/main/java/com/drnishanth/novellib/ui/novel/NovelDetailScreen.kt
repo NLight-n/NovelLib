@@ -22,6 +22,9 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
@@ -92,6 +95,27 @@ fun NovelDetailScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { viewModel.checkForUpdates() },
+                        enabled = !uiState.isCheckingUpdates
+                    ) {
+                        if (uiState.isCheckingUpdates) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Check for Updates")
+                        }
+                    }
+                    val notificationsEnabled = libraryEntry?.notificationsEnabled ?: true
+                    IconButton(onClick = { viewModel.toggleNotifications() }) {
+                        Icon(
+                            if (notificationsEnabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                            contentDescription = if (notificationsEnabled) "Disable Notifications" else "Enable Notifications",
+                            tint = if (notificationsEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     IconButton(onClick = { viewModel.showStoragePolicyDialog() }) {
                         Icon(Icons.Default.Tune, contentDescription = "Storage Policy")
                     }

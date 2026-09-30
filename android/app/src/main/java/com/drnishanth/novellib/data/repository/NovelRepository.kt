@@ -21,7 +21,11 @@ import com.drnishanth.novellib.downloads.DownloadManager
 import com.drnishanth.novellib.downloads.StoragePolicyManager
 import com.drnishanth.novellib.downloads.models.RetentionPolicy
 import com.drnishanth.novellib.downloads.models.StoragePolicy
+import com.drnishanth.novellib.core.database.dao.NotificationDao
+import com.drnishanth.novellib.core.database.entities.NotificationEntity
+import com.drnishanth.novellib.core.notifications.NovelNotificationManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -35,6 +39,7 @@ class NovelRepository(
     private val readingProgressDao: ReadingProgressDao,
     private val readerPreferencesDao: ReaderPreferencesDao,
     private val sourceDefinitionDao: SourceDefinitionDao,
+    private val notificationDao: NotificationDao? = null,
     private val scraperEngine: SourceDefinitionEngine = SourceDefinitionEngine(),
     private val rollbackManager: RollbackManager? = null,
     val downloadManager: DownloadManager? = null,
@@ -289,5 +294,133 @@ class NovelRepository(
         return DefaultSourceDefinitions.BUILTIN_DEFINITIONS.firstOrNull {
             scraperEngine.matches(url, it)
         }
+    }
+
+    suspend fun updateNotificationPreference(profileId: String, novelId: String, enabled: Boolean) {
+        novelDao.updateNotificationPreference(profileId, novelId, enabled)
+    }
+
+    fun getNotifications(profileId: String): Flow<List<NotificationEntity>> {
+        return notificationDao?.getNotificationsForProfile(profileId) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }
+
+    suspend fun markNotificationAsRead(id: String) {
+        notificationDao?.markAsRead(id)
+    }
+
+    suspend fun clearAllNotifications(profileId: String) {
+        notificationDao?.clearAllForProfile(profileId)
+    }
+
+    /**
+     * Checks a specific novel for newly published chapters from its connected sources.
+     * Inserts new chapters, notifies interested profiles, and auto-queues downloads if configured.
+     */
+    suspend fun checkNovelUpdates(novelId: String): Result<List<ChapterEntity>> = withContext(Dispatchers.IO) {
+        try {
+            val novel = novelDao.getNovelById(novelId)
+                ?: return@withContext Result.failure(IllegalArgumentException("Novel not found"))
+            val sources = novelDao.getSourcesForNovel(novelId)
+            if (sources.isEmpty()) {
+                return@withContext Result.success(emptyList())
+            }
+
+            val allNewChapters = mutableListOf<ChapterEntity>()
+            val existingChapters = chapterDao.getChaptersListForNovel(novelId)
+            val existingUrls = existingChapters.map { it.sourceUrl }.toSet()
+            val existingNumbers = existingChapters.map { it.chapterNumber }.toSet()
+
+            for (source in sources) {
+                val def = findMatchingDefinition(source.sourceUrl) ?: continue
+                val (_, scrapedChapters) = scraperEngine.scrapeNovel(source.sourceUrl, def)
+
+                val newScraped = scrapedChapters.filter {
+                    it.url !in existingUrls && it.number !in existingNumbers
+                }
+
+                if (newScraped.isNotEmpty()) {
+                    val newEntities = newScraped.map { item ->
+                        ChapterEntity(
+                            id = UUID.randomUUID().toString(),
+                            novelId = novelId,
+                            sourceId = source.id,
+                            chapterNumber = item.number,
+                            title = item.title,
+                            sourceUrl = item.url,
+                            publishedAt = item.publishedAt,
+                            discoveredAt = System.currentTimeMillis()
+                        )
+                    }
+                    chapterDao.insertChapters(newEntities)
+                    allNewChapters.addAll(newEntities)
+                }
+
+                novelDao.insertSource(
+                    source.copy(
+                        lastCheckedAt = System.currentTimeMillis(),
+                        lastSuccessfulCheckAt = System.currentTimeMillis()
+                    )
+                )
+                rollbackManager?.recordSuccess(def.id)
+            }
+
+            if (allNewChapters.isNotEmpty()) {
+                val libraryEntries = novelDao.getLibraryEntriesForNovel(novelId)
+                for (entry in libraryEntries) {
+                    if (entry.notificationsEnabled) {
+                        NovelNotificationManager.showNewChaptersNotification(
+                            context = context,
+                            profileId = entry.profileId,
+                            novelId = novelId,
+                            novelTitle = novel.title,
+                            newChaptersCount = allNewChapters.size,
+                            firstChapterTitle = allNewChapters.firstOrNull()?.title
+                        )
+
+                        notificationDao?.insertNotification(
+                            NotificationEntity(
+                                id = UUID.randomUUID().toString(),
+                                profileId = entry.profileId,
+                                novelId = novelId,
+                                chapterId = allNewChapters.firstOrNull()?.id,
+                                type = "new_chapter",
+                                title = "New Chapters: ${novel.title}",
+                                message = "${allNewChapters.size} new chapter(s) released: ${allNewChapters.firstOrNull()?.title ?: ""}",
+                                read = false,
+                                createdAt = System.currentTimeMillis()
+                            )
+                        )
+                    }
+
+                    if (entry.autoDownloadEnabled) {
+                        syncNovelStoragePolicy(entry.profileId, novelId)
+                    }
+                }
+            }
+
+            Result.success(allNewChapters)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Checks all tracked novels in the library for chapter updates, respecting rate limits.
+     */
+    suspend fun checkAllNovelsUpdates(): Map<String, List<ChapterEntity>> = withContext(Dispatchers.IO) {
+        val results = mutableMapOf<String, List<ChapterEntity>>()
+        val trackedNovels = novelDao.getAllNovels()
+
+        for (novel in trackedNovels) {
+            try {
+                val newChapters = checkNovelUpdates(novel.id).getOrDefault(emptyList())
+                if (newChapters.isNotEmpty()) {
+                    results[novel.id] = newChapters
+                }
+                // Polite delay between novel sources (1.2s)
+                delay(1200)
+            } catch (_: Exception) {}
+        }
+        results
     }
 }

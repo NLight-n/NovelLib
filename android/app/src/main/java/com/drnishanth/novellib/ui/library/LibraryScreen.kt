@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -94,6 +95,19 @@ fun LibraryScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { viewModel.checkAllUpdates() },
+                        enabled = !uiState.isRefreshing
+                    ) {
+                        if (uiState.isRefreshing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Check All Updates")
+                        }
+                    }
                     IconButton(onClick = onOpenSources) {
                         Icon(Icons.Default.CloudDownload, contentDescription = "Manage Sources")
                     }

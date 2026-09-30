@@ -89,7 +89,7 @@ data class ScrapedChapterItem(
     val number: Int,
     val title: String,
     val url: String,
-    val publishedAt: Long?
+    val publishedAt: Long? = null
 )
 
 data class ScrapedChapterContent(

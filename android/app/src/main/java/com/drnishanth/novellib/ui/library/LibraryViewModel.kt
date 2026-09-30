@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 
 data class LibraryUiState(
     val isImporting: Boolean = false,
+    val isRefreshing: Boolean = false,
     val showAddDialog: Boolean = false,
     val importError: String? = null,
     val importSuccessMessage: String? = null
@@ -73,6 +74,22 @@ class LibraryViewModel(
 
     fun clearSuccessMessage() {
         _uiState.value = _uiState.value.copy(importSuccessMessage = null)
+    }
+
+    fun checkAllUpdates() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isRefreshing = true)
+            val updates = novelRepository.checkAllNovelsUpdates()
+            val totalNewChapters = updates.values.sumOf { it.size }
+            _uiState.value = _uiState.value.copy(
+                isRefreshing = false,
+                importSuccessMessage = if (totalNewChapters > 0) {
+                    "Discovered $totalNewChapters new chapter(s) across library!"
+                } else {
+                    "Library is up to date"
+                }
+            )
+        }
     }
 
     fun switchProfile() {

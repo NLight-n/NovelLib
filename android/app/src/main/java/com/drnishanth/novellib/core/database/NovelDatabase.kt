@@ -5,6 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.drnishanth.novellib.core.database.dao.ChapterDao
+import com.drnishanth.novellib.core.database.dao.NotificationDao
 import com.drnishanth.novellib.core.database.dao.NovelDao
 import com.drnishanth.novellib.core.database.dao.ReaderPreferencesDao
 import com.drnishanth.novellib.core.database.dao.ReadingProgressDao
@@ -34,7 +35,7 @@ import com.drnishanth.novellib.core.database.entities.UserProfileEntity
         SourceDefinitionEntity::class,
         SyncDeviceEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class NovelDatabase : RoomDatabase() {
@@ -44,6 +45,7 @@ abstract class NovelDatabase : RoomDatabase() {
     abstract fun readingProgressDao(): ReadingProgressDao
     abstract fun readerPreferencesDao(): ReaderPreferencesDao
     abstract fun sourceDefinitionDao(): SourceDefinitionDao
+    abstract fun notificationDao(): NotificationDao
 
     companion object {
         @Volatile

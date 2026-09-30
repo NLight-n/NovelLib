@@ -81,71 +81,100 @@ class DownloadManager(
         }
     }
 
+    data class BatchDownloadResult(val successCount: Int, val failureCount: Int)
+
     private fun launchDownloadJob(chapterId: String): Job = scope.launch {
         semaphore.withPermit {
-            // Check Wi-Fi constraint if enabled
-            if (wifiOnly && !isWifiConnected()) {
-                updateStatus(chapterId, DownloadState.FAILED, "Waiting for Wi-Fi connection")
-                return@withPermit
-            }
-
-            val chapter = chapterDao.getChapterById(chapterId) ?: return@withPermit
-            if (chapter.downloadState == DownloadState.AVAILABLE.value) {
-                updateStatus(chapterId, DownloadState.AVAILABLE)
-                return@withPermit
-            }
-
-            updateStatus(chapterId, DownloadState.DOWNLOADING)
-            chapterDao.updateDownloadState(
-                chapterId = chapterId,
-                state = DownloadState.DOWNLOADING.value,
-                filePath = null,
-                contentHash = null,
-                downloadedAt = null
-            )
-
             try {
-                // Rate-limit delay (500ms) between chapter scrapes
-                delay(500)
-
-                val definition = findMatchingDefinition(chapter.sourceUrl)
-                    ?: throw IllegalStateException("No compatible source definition for ${chapter.sourceUrl}")
-
-                val scraped = scraperEngine.scrapeChapterContent(chapter.sourceUrl, definition)
-
-                // Save to private internal storage
-                val chaptersDir = File(context.filesDir, "chapters/${chapter.novelId}")
-                if (!chaptersDir.exists()) chaptersDir.mkdirs()
-
-                val targetFile = File(chaptersDir, "${scraped.contentHash}.html")
-                targetFile.writeText(scraped.htmlContent, Charsets.UTF_8)
-
-                chapterDao.updateDownloadState(
-                    chapterId = chapter.id,
-                    state = DownloadState.AVAILABLE.value,
-                    filePath = targetFile.absolutePath,
-                    contentHash = scraped.contentHash,
-                    downloadedAt = System.currentTimeMillis()
-                )
-
-                rollbackManager?.recordSuccess(definition.id)
-                updateStatus(chapterId, DownloadState.AVAILABLE)
-            } catch (e: Exception) {
-                chapterDao.updateDownloadState(
-                    chapterId = chapter.id,
-                    state = DownloadState.FAILED.value,
-                    filePath = null,
-                    contentHash = null,
-                    downloadedAt = null
-                )
-                findMatchingDefinition(chapter.sourceUrl)?.let { def ->
-                    rollbackManager?.recordFailure(def.id)
-                }
-                updateStatus(chapterId, DownloadState.FAILED, e.message)
+                downloadChapterDirect(chapterId)
             } finally {
                 activeJobs.remove(chapterId)
             }
         }
+    }
+
+    /**
+     * Directly downloads a single chapter synchronously within the calling coroutine.
+     * Returns true if download was successful or already available, false otherwise.
+     */
+    suspend fun downloadChapterDirect(chapterId: String): Boolean = withContext(Dispatchers.IO) {
+        // Check Wi-Fi constraint if enabled
+        if (wifiOnly && !isWifiConnected()) {
+            updateStatus(chapterId, DownloadState.FAILED, "Waiting for Wi-Fi connection")
+            return@withContext false
+        }
+
+        val chapter = chapterDao.getChapterById(chapterId) ?: return@withContext false
+        if (chapter.downloadState == DownloadState.AVAILABLE.value) {
+            updateStatus(chapterId, DownloadState.AVAILABLE)
+            return@withContext true
+        }
+
+        updateStatus(chapterId, DownloadState.DOWNLOADING)
+        chapterDao.updateDownloadState(
+            chapterId = chapterId,
+            state = DownloadState.DOWNLOADING.value,
+            filePath = null,
+            contentHash = null,
+            downloadedAt = null
+        )
+
+        try {
+            // Rate-limit delay (500ms) between chapter scrapes
+            delay(500)
+
+            val definition = findMatchingDefinition(chapter.sourceUrl)
+                ?: throw IllegalStateException("No compatible source definition for ${chapter.sourceUrl}")
+
+            val scraped = scraperEngine.scrapeChapterContent(chapter.sourceUrl, definition)
+
+            // Save to private internal storage
+            val chaptersDir = File(context.filesDir, "chapters/${chapter.novelId}")
+            if (!chaptersDir.exists()) chaptersDir.mkdirs()
+
+            val targetFile = File(chaptersDir, "${scraped.contentHash}.html")
+            targetFile.writeText(scraped.htmlContent, Charsets.UTF_8)
+
+            chapterDao.updateDownloadState(
+                chapterId = chapter.id,
+                state = DownloadState.AVAILABLE.value,
+                filePath = targetFile.absolutePath,
+                contentHash = scraped.contentHash,
+                downloadedAt = System.currentTimeMillis()
+            )
+
+            rollbackManager?.recordSuccess(definition.id)
+            updateStatus(chapterId, DownloadState.AVAILABLE)
+            true
+        } catch (e: Exception) {
+            chapterDao.updateDownloadState(
+                chapterId = chapter.id,
+                state = DownloadState.FAILED.value,
+                filePath = null,
+                contentHash = null,
+                downloadedAt = null
+            )
+            findMatchingDefinition(chapter.sourceUrl)?.let { def ->
+                rollbackManager?.recordFailure(def.id)
+            }
+            updateStatus(chapterId, DownloadState.FAILED, e.message)
+            false
+        }
+    }
+
+    /**
+     * Sequentially processes all currently queued chapters in the database.
+     * Ideal for background WorkManager tasks.
+     */
+    suspend fun processQueuedDownloads(): BatchDownloadResult = withContext(Dispatchers.IO) {
+        val queued = chapterDao.getQueuedChapters()
+        var success = 0
+        var failure = 0
+        for (chapter in queued) {
+            val ok = downloadChapterDirect(chapter.id)
+            if (ok) success++ else failure++
+        }
+        BatchDownloadResult(success, failure)
     }
 
     fun cancel(chapterId: String) {

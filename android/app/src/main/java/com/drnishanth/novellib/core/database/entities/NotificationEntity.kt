@@ -35,6 +35,9 @@ data class NotificationEntity(
     @ColumnInfo(name = "type")
     val type: String, // new_chapter, download_completed, download_failed, source_update_failed, sync_completed, sync_failed
 
+    @ColumnInfo(name = "title")
+    val title: String = "NovelLib",
+
     @ColumnInfo(name = "message")
     val message: String,
 

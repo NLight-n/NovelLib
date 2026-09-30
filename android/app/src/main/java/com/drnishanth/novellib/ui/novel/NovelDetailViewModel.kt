@@ -25,6 +25,7 @@ import kotlinx.coroutines.launch
 
 data class NovelDetailUiState(
     val showStoragePolicyDialog: Boolean = false,
+    val isCheckingUpdates: Boolean = false,
     val message: String? = null
 )
 
@@ -117,6 +118,42 @@ class NovelDetailViewModel(
         viewModelScope.launch {
             val deletedCount = downloadManager.deleteDownloadedNovel(novelId)
             _uiState.value = _uiState.value.copy(message = "Removed $deletedCount downloaded chapter(s)")
+        }
+    }
+
+    fun toggleNotifications() {
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        val current = _libraryEntry.value?.notificationsEnabled ?: true
+        val newSetting = !current
+        viewModelScope.launch {
+            novelRepository.updateNotificationPreference(profileId, novelId, newSetting)
+            loadLibraryEntry()
+            _uiState.value = _uiState.value.copy(
+                message = if (newSetting) "Notifications enabled for this novel" else "Notifications disabled for this novel"
+            )
+        }
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isCheckingUpdates = true)
+            val result = novelRepository.checkNovelUpdates(novelId)
+            _uiState.value = _uiState.value.copy(isCheckingUpdates = false)
+            result.onSuccess { newChapters ->
+                if (newChapters.isNotEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        message = "Found ${newChapters.size} new chapter(s)!"
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        message = "Novel is up to date"
+                    )
+                }
+            }.onFailure { err ->
+                _uiState.value = _uiState.value.copy(
+                    message = "Update check failed: ${err.message}"
+                )
+            }
         }
     }
 

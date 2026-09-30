@@ -77,4 +77,16 @@ interface NovelDao {
 
     @Query("UPDATE library_entries SET last_opened_at = :timestamp WHERE profile_id = :profileId AND novel_id = :novelId")
     suspend fun updateLastOpened(profileId: String, novelId: String, timestamp: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM novels")
+    suspend fun getAllNovels(): List<NovelEntity>
+
+    @Query("SELECT * FROM library_entries")
+    suspend fun getAllLibraryEntries(): List<LibraryEntryEntity>
+
+    @Query("SELECT * FROM library_entries WHERE novel_id = :novelId")
+    suspend fun getLibraryEntriesForNovel(novelId: String): List<LibraryEntryEntity>
+
+    @Query("UPDATE library_entries SET notifications_enabled = :enabled WHERE profile_id = :profileId AND novel_id = :novelId")
+    suspend fun updateNotificationPreference(profileId: String, novelId: String, enabled: Boolean)
 }
