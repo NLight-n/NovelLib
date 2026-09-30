@@ -30,10 +30,16 @@ This repository is organized as a monorepo containing both the Android mobile ap
 
 - **Local-First & Serverless:** All reading progress, novel metadata, and downloaded chapters are stored locally on the device in Room and app-private storage.
 - **Multi-Profile Isolation:** Multiple family members can use the same device with separate libraries and reading progress. Profiles optionally support local **Argon2id** password protection.
-- **Distraction-Free E-Ink Reader:** Clean, normalized text reading experience with Light, Dark, Sepia, and high-contrast E-Ink themes, font size scaling, and line-height controls.
+- **E-Ink Hardware Optimized (Bigme & Onyx Boox):**
+  - Discrete tap-to-page navigation with zero scroll animation / ghosting.
+  - EPDC hardware screen refresh controller and electrophoretic clear-flash overlay.
+  - Physical button support (Volume Up/Down, Page Up/Down, DPAD).
+  - High-contrast pure monochrome theme tokens and battery diagnostics.
 - **Declarative Web Scrapers:** Website extraction rules are purely declarative JSON (CSS selectors, regex, HTML sanitization). No downloaded code is executed.
-- **Browser Share Integration:** Share any novel URL directly from Chrome, Firefox, or Brave to import fiction into your library.
-- **Peer-to-Peer LAN Synchronization (Upcoming):** Synchronize metadata between devices on the same Wi-Fi network without cloud servers.
+- **Storage Policies & Download Manager:** Online, Offline, and Hybrid caching (`latest_n_chapters`, `latest_n_unread_chapters`, `all_unread_chapters`) with retention-based cache eviction.
+- **Background Automation:** WorkManager periodic novel update checks, queued background chapter downloads, and cache cleanup with system notifications.
+- **Browser Share Integration:** Share any novel URL directly from Chrome, Firefox, or Brave (`ACTION_SEND`) to import fiction into your library.
+- **Peer-to-Peer LAN Synchronization:** Serverless mDNS (NSD) discovery, EC secp256r1 mutual pairing with 6-digit Short Authentication String (SAS), and deterministic conflict resolution (Set Union + LWW).
 
 ---
 
