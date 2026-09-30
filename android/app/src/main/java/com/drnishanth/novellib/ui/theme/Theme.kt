@@ -36,9 +36,17 @@ private val SepiaColorScheme = lightColorScheme(
 
 private val EInkColorScheme = lightColorScheme(
     primary = Color.Black,
+    onPrimary = Color.White,
+    primaryContainer = Color.White,
+    onPrimaryContainer = Color.Black,
+    secondary = Color.Black,
+    onSecondary = Color.White,
     background = BackgroundEInk,
     surface = SurfaceEInk,
-    onPrimary = Color.White,
+    surfaceVariant = Color.White,
+    onSurfaceVariant = Color.Black,
+    outline = Color.Black,
+    outlineVariant = Color.Black,
     onBackground = TextEInk,
     onSurface = TextEInk
 )

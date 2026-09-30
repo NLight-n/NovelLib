@@ -46,5 +46,11 @@ data class ReaderPreferencesEntity(
     val animationEnabled: Boolean = false, // false for E-Ink friendliness!
 
     @ColumnInfo(name = "page_navigation_mode")
-    val pageNavigationMode: String = "scroll" // scroll, paging
+    val pageNavigationMode: String = "scroll", // scroll, paging
+
+    @ColumnInfo(name = "eink_full_refresh_interval")
+    val einkFullRefreshInterval: Int = 10, // 0 = disabled, 1, 5, 10, 20 pages
+
+    @ColumnInfo(name = "volume_keys_navigation")
+    val volumeKeysNavigation: Boolean = true // Navigate pages via physical volume/e-reader buttons
 )

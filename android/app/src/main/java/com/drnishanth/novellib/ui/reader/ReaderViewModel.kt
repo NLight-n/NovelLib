@@ -1,14 +1,21 @@
 package com.drnishanth.novellib.ui.reader
 
+import android.content.Context
+import android.view.KeyEvent
+import android.view.View
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.drnishanth.novellib.NovelLibApplication
 import com.drnishanth.novellib.core.database.entities.ChapterEntity
 import com.drnishanth.novellib.core.database.entities.ReaderPreferencesEntity
+import com.drnishanth.novellib.core.eink.BatteryDiagnostics
+import com.drnishanth.novellib.core.eink.EInkHardwareManager
+import com.drnishanth.novellib.core.eink.ReaderPagingEngine
 import com.drnishanth.novellib.data.repository.NovelRepository
 import com.drnishanth.novellib.data.repository.ProfileRepository
 import com.drnishanth.novellib.downloads.DownloadManager
 import com.drnishanth.novellib.downloads.models.RetentionPolicy
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,7 +32,13 @@ data class ReaderUiState(
     val errorMessage: String? = null,
     val showControls: Boolean = false,
     val initialScrollIndex: Int = 0,
-    val preferences: ReaderPreferencesEntity = ReaderPreferencesEntity(profileId = "")
+    val preferences: ReaderPreferencesEntity = ReaderPreferencesEntity(profileId = ""),
+    // E-Ink and Paging extensions
+    val isEInkDevice: Boolean = false,
+    val pages: List<ReaderPagingEngine.ReaderPage> = emptyList(),
+    val currentPageIndex: Int = 0,
+    val isPageRefreshFlashing: Boolean = false,
+    val batteryStatus: BatteryDiagnostics.BatteryStatus? = null
 )
 
 class ReaderViewModel(
@@ -36,14 +49,29 @@ class ReaderViewModel(
     private val downloadManager: DownloadManager = NovelLibApplication.instance.downloadManager
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ReaderUiState())
+    private val _uiState = MutableStateFlow(
+        ReaderUiState(
+            isEInkDevice = EInkHardwareManager.isEInkDevice()
+        )
+    )
     val uiState: StateFlow<ReaderUiState> = _uiState.asStateFlow()
 
     private var allChapters: List<ChapterEntity> = emptyList()
+    private var pageTurnCount = 0
 
     init {
+        loadBatteryDiagnostics()
         loadPreferences()
         loadChapter(initialChapterId)
+    }
+
+    private fun loadBatteryDiagnostics() {
+        try {
+            val status = BatteryDiagnostics.getBatteryStatus(NovelLibApplication.instance)
+            _uiState.value = _uiState.value.copy(batteryStatus = status)
+        } catch (_: Throwable) {
+            // Ignore in headless unit test environments
+        }
     }
 
     private fun loadPreferences() {
@@ -51,7 +79,14 @@ class ReaderViewModel(
         viewModelScope.launch {
             val prefs = novelRepository.getReaderPreferences(profileId).firstOrNull()
             if (prefs != null) {
-                _uiState.value = _uiState.value.copy(preferences = prefs)
+                // If running on an E-Ink device and user hasn't explicitly customized, default to eink theme
+                val effectivePrefs = if (_uiState.value.isEInkDevice && prefs.theme == "light") {
+                    prefs.copy(theme = "eink", pageNavigationMode = "paging", animationEnabled = false)
+                } else {
+                    prefs
+                }
+                _uiState.value = _uiState.value.copy(preferences = effectivePrefs)
+                recomputePages()
             }
         }
     }
@@ -85,12 +120,23 @@ class ReaderViewModel(
                 val html = contentResult.getOrNull() ?: ""
                 val parsedParagraphs = parseHtmlToParagraphs(html)
 
+                val prefs = _uiState.value.preferences
+                val targetChars = ReaderPagingEngine.calculateTargetCharsPerPage(
+                    fontSize = prefs.fontSize,
+                    lineHeight = prefs.lineHeight,
+                    margins = prefs.margins
+                )
+                val generatedPages = ReaderPagingEngine.paginate(parsedParagraphs, targetChars)
+                val targetPageIndex = ReaderPagingEngine.pageIndexForScroll(savedPos, generatedPages)
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     currentChapter = currentChapter,
                     previousChapterId = prevId,
                     nextChapterId = nextId,
                     paragraphs = parsedParagraphs,
+                    pages = generatedPages,
+                    currentPageIndex = targetPageIndex,
                     initialScrollIndex = savedPos
                 )
 
@@ -116,6 +162,121 @@ class ReaderViewModel(
                     errorMessage = contentResult.exceptionOrNull()?.message ?: "Failed to load chapter content"
                 )
             }
+        }
+    }
+
+    /**
+     * Recomputes discrete pages when typography or margins change while preserving current position.
+     */
+    private fun recomputePages() {
+        val paragraphs = _uiState.value.paragraphs
+        if (paragraphs.isEmpty()) return
+
+        val prefs = _uiState.value.preferences
+        val targetChars = ReaderPagingEngine.calculateTargetCharsPerPage(
+            fontSize = prefs.fontSize,
+            lineHeight = prefs.lineHeight,
+            margins = prefs.margins
+        )
+
+        val currentParagraphIndex = if (_uiState.value.pages.isNotEmpty()) {
+            ReaderPagingEngine.scrollIndexForPage(_uiState.value.currentPageIndex, _uiState.value.pages)
+        } else {
+            _uiState.value.initialScrollIndex
+        }
+
+        val newPages = ReaderPagingEngine.paginate(paragraphs, targetChars)
+        val newPageIndex = ReaderPagingEngine.pageIndexForScroll(currentParagraphIndex, newPages)
+
+        _uiState.value = _uiState.value.copy(
+            pages = newPages,
+            currentPageIndex = newPageIndex
+        )
+    }
+
+    fun nextPage() {
+        val state = _uiState.value
+        if (state.currentPageIndex < state.pages.size - 1) {
+            val newIndex = state.currentPageIndex + 1
+            _uiState.value = state.copy(currentPageIndex = newIndex)
+            onPageTurned(newIndex)
+        } else if (state.nextChapterId != null) {
+            loadChapter(state.nextChapterId)
+        }
+    }
+
+    fun previousPage() {
+        val state = _uiState.value
+        if (state.currentPageIndex > 0) {
+            val newIndex = state.currentPageIndex - 1
+            _uiState.value = state.copy(currentPageIndex = newIndex)
+            onPageTurned(newIndex)
+        } else if (state.previousChapterId != null) {
+            loadChapter(state.previousChapterId)
+        }
+    }
+
+    fun goToPage(pageIndex: Int) {
+        val state = _uiState.value
+        val clamped = pageIndex.coerceIn(0, (state.pages.size - 1).coerceAtLeast(0))
+        _uiState.value = state.copy(currentPageIndex = clamped)
+        onPageTurned(clamped)
+    }
+
+    private fun onPageTurned(pageIndex: Int) {
+        val state = _uiState.value
+        val paragraphIndex = ReaderPagingEngine.scrollIndexForPage(pageIndex, state.pages)
+        saveScrollIndex(paragraphIndex)
+
+        // Check periodic E-Ink auto-refresh
+        pageTurnCount++
+        val interval = state.preferences.einkFullRefreshInterval
+        if (interval > 0 && pageTurnCount >= interval) {
+            triggerScreenRefresh()
+        }
+    }
+
+    /**
+     * Intercepts physical e-reader buttons (Volume keys, Page Up/Down, DPAD).
+     */
+    fun handleHardwareKeyEvent(keyCode: Int): Boolean {
+        if (!_uiState.value.preferences.volumeKeysNavigation) return false
+
+        return when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN,
+            KeyEvent.KEYCODE_PAGE_DOWN,
+            KeyEvent.KEYCODE_DPAD_DOWN,
+            KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                nextPage()
+                true
+            }
+            KeyEvent.KEYCODE_VOLUME_UP,
+            KeyEvent.KEYCODE_PAGE_UP,
+            KeyEvent.KEYCODE_DPAD_UP,
+            KeyEvent.KEYCODE_DPAD_LEFT -> {
+                previousPage()
+                true
+            }
+            else -> false
+        }
+    }
+
+    /**
+     * Triggers EPDC hardware refresh and brief electrophoretic clear flash.
+     */
+    fun triggerScreenRefresh(context: Context? = null, view: View? = null) {
+        pageTurnCount = 0
+        try {
+            val appCtx = context ?: NovelLibApplication.instance
+            EInkHardwareManager.triggerScreenRefresh(appCtx, view)
+        } catch (_: Throwable) {
+            // Safe in test environments
+        }
+
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isPageRefreshFlashing = true)
+            delay(70) // Flash duration to wipe residual electrophoretic pigment
+            _uiState.value = _uiState.value.copy(isPageRefreshFlashing = false)
         }
     }
 
@@ -151,6 +312,7 @@ class ReaderViewModel(
         val updated = _uiState.value.preferences.copy(fontSize = newSize)
         _uiState.value = _uiState.value.copy(preferences = updated)
         savePrefs(updated)
+        recomputePages()
     }
 
     fun updateFontFamily(family: String) {
@@ -163,10 +325,23 @@ class ReaderViewModel(
         val updated = _uiState.value.preferences.copy(lineHeight = height)
         _uiState.value = _uiState.value.copy(preferences = updated)
         savePrefs(updated)
+        recomputePages()
     }
 
     fun updateNavigationMode(mode: String) {
         val updated = _uiState.value.preferences.copy(pageNavigationMode = mode)
+        _uiState.value = _uiState.value.copy(preferences = updated)
+        savePrefs(updated)
+    }
+
+    fun updateRefreshInterval(interval: Int) {
+        val updated = _uiState.value.preferences.copy(einkFullRefreshInterval = interval)
+        _uiState.value = _uiState.value.copy(preferences = updated)
+        savePrefs(updated)
+    }
+
+    fun updateVolumeKeysNavigation(enabled: Boolean) {
+        val updated = _uiState.value.preferences.copy(volumeKeysNavigation = enabled)
         _uiState.value = _uiState.value.copy(preferences = updated)
         savePrefs(updated)
     }
