@@ -14,6 +14,7 @@ import com.drnishanth.novellib.core.database.entities.ReaderPreferencesEntity
 import com.drnishanth.novellib.core.database.entities.ReadingProgressEntity
 import com.drnishanth.novellib.core.database.entities.SourceEntity
 import com.drnishanth.novellib.scraping.engine.DefaultSourceDefinitions
+import com.drnishanth.novellib.scraping.engine.RollbackManager
 import com.drnishanth.novellib.scraping.engine.SourceDefinitionEngine
 import com.drnishanth.novellib.scraping.models.SourceDefinition
 import kotlinx.coroutines.Dispatchers
@@ -30,7 +31,8 @@ class NovelRepository(
     private val readingProgressDao: ReadingProgressDao,
     private val readerPreferencesDao: ReaderPreferencesDao,
     private val sourceDefinitionDao: SourceDefinitionDao,
-    private val scraperEngine: SourceDefinitionEngine = SourceDefinitionEngine()
+    private val scraperEngine: SourceDefinitionEngine = SourceDefinitionEngine(),
+    private val rollbackManager: RollbackManager? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -149,8 +151,12 @@ class NovelRepository(
             )
             novelDao.insertLibraryEntry(libraryEntry)
 
+            rollbackManager?.recordSuccess(definition.id)
             Result.success(novelEntity)
         } catch (e: Exception) {
+            findMatchingDefinition(url)?.let { def ->
+                rollbackManager?.recordFailure(def.id)
+            }
             Result.failure(e)
         }
     }
@@ -196,8 +202,15 @@ class NovelRepository(
                 downloadedAt = System.currentTimeMillis()
             )
 
+            rollbackManager?.recordSuccess(definition.id)
             Result.success(scraped.htmlContent)
         } catch (e: Exception) {
+            val chapter = chapterDao.getChapterById(chapterId)
+            if (chapter != null) {
+                findMatchingDefinition(chapter.sourceUrl)?.let { def ->
+                    rollbackManager?.recordFailure(def.id)
+                }
+            }
             Result.failure(e)
         }
     }

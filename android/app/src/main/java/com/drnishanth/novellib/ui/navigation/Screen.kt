@@ -9,4 +9,5 @@ sealed class Screen(val route: String) {
     data object Reader : Screen("reader/{novelId}/{chapterId}") {
         fun createRoute(novelId: String, chapterId: String) = "reader/$novelId/$chapterId"
     }
+    data object Sources : Screen("sources")
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -59,7 +60,8 @@ import com.drnishanth.novellib.core.database.dao.NovelWithEntry
 fun LibraryScreen(
     viewModel: LibraryViewModel,
     onNovelSelected: (String) -> Unit,
-    onSwitchProfile: () -> Unit
+    onSwitchProfile: () -> Unit,
+    onOpenSources: () -> Unit = {}
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState()
     val novels by viewModel.novels.collectAsState()
@@ -92,6 +94,9 @@ fun LibraryScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenSources) {
+                        Icon(Icons.Default.CloudDownload, contentDescription = "Manage Sources")
+                    }
                     IconButton(onClick = {
                         viewModel.switchProfile()
                         onSwitchProfile()

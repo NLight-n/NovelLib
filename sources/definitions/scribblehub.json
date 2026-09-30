@@ -1,0 +1,84 @@
+{
+  "id": "scribblehub",
+  "version": 1,
+  "name": "Scribble Hub",
+  "description": "Original web stories and community fiction",
+  "minimum_engine_version": 1,
+  "match": {
+    "hosts": [
+      "scribblehub.com",
+      "www.scribblehub.com"
+    ],
+    "url_patterns": [
+      "https://www.scribblehub.com/series/*",
+      "https://scribblehub.com/series/*",
+      "https://www.scribblehub.com/read/*",
+      "https://scribblehub.com/read/*"
+    ]
+  },
+  "requests": {
+    "default": {
+      "method": "GET",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
+      }
+    }
+  },
+  "novel": {
+    "title": {
+      "selector": "h1.fic_title",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "author": {
+      "selector": "span.auth_name_fic a",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "description": {
+      "selector": ".wi_fic_desc",
+      "type": "html",
+      "transform": ["trim"]
+    },
+    "cover": {
+      "selector": ".fic_image img",
+      "type": "attribute",
+      "attribute": "src",
+      "transform": ["absolute_url"]
+    },
+    "status": {
+      "selector": "span.rnd_status",
+      "type": "text",
+      "transform": ["trim"]
+    }
+  },
+  "chapters": {
+    "container": "ul.toc_w li.toc_li",
+    "title": {
+      "selector": "a.toc_a",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "url": {
+      "selector": "a.toc_a",
+      "type": "attribute",
+      "attribute": "href",
+      "transform": ["absolute_url"]
+    },
+    "published_at": {
+      "selector": "span.fic_date_pub",
+      "type": "text",
+      "transform": ["trim"]
+    }
+  },
+  "chapter": {
+    "content": {
+      "selector": "div.chp_raw",
+      "type": "html"
+    },
+    "sanitize": {
+      "remove_tags": ["script", "style", "iframe", "button"],
+      "allow_tags": ["p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote"]
+    }
+  }
+}

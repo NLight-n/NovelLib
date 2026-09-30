@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "updated_at": 1727683200000,
+  "version": 2,
+  "updated_at": 1727685000000,
   "sources": [
     {
       "id": "royalroad",
@@ -10,6 +10,15 @@
       "minimum_engine_version": 1,
       "relative_path": "definitions/royalroad.json",
       "checksum": "sha256:a481a80e0372ccc0df5b71aab1ceffd4bdf94c909b51158f10e657caa28c9e4d"
+    },
+    {
+      "id": "scribblehub",
+      "version": 1,
+      "name": "Scribble Hub",
+      "description": "Original web stories and community fiction",
+      "minimum_engine_version": 1,
+      "relative_path": "definitions/scribblehub.json",
+      "checksum": "sha256:1cf73858558225cca194cee1eea4db16a7d4230298504eae31a1c0c3bbc2757b"
     }
   ]
 }

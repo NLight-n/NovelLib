@@ -90,5 +90,87 @@ object DefaultSourceDefinitions {
         )
     )
 
-    val BUILTIN_DEFINITIONS: List<SourceDefinition> = listOf(ROYAL_ROAD)
+    val SCRIBBLE_HUB = SourceDefinition(
+        id = "scribblehub",
+        version = 1,
+        name = "Scribble Hub",
+        description = "Original web stories and community fiction",
+        minimumEngineVersion = 1,
+        match = SourceMatch(
+            hosts = listOf("scribblehub.com", "www.scribblehub.com"),
+            urlPatterns = listOf(
+                "https://www.scribblehub.com/series/*",
+                "https://scribblehub.com/series/*",
+                "https://www.scribblehub.com/read/*",
+                "https://scribblehub.com/read/*"
+            )
+        ),
+        requests = mapOf(
+            "default" to RequestConfig(
+                method = "GET",
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
+                )
+            )
+        ),
+        novel = NovelRules(
+            title = SelectorRule(
+                selector = "h1.fic_title",
+                type = "text",
+                transform = listOf("trim")
+            ),
+            author = SelectorRule(
+                selector = "span.auth_name_fic a",
+                type = "text",
+                transform = listOf("trim")
+            ),
+            description = SelectorRule(
+                selector = ".wi_fic_desc",
+                type = "html",
+                transform = listOf("trim")
+            ),
+            cover = SelectorRule(
+                selector = ".fic_image img",
+                type = "attribute",
+                attribute = "src",
+                transform = listOf("absolute_url")
+            ),
+            status = SelectorRule(
+                selector = "span.rnd_status",
+                type = "text",
+                transform = listOf("trim")
+            )
+        ),
+        chapters = ChaptersRules(
+            container = "ul.toc_w li.toc_li",
+            title = SelectorRule(
+                selector = "a.toc_a",
+                type = "text",
+                transform = listOf("trim")
+            ),
+            url = SelectorRule(
+                selector = "a.toc_a",
+                type = "attribute",
+                attribute = "href",
+                transform = listOf("absolute_url")
+            ),
+            publishedAt = SelectorRule(
+                selector = "span.fic_date_pub",
+                type = "text",
+                transform = listOf("trim")
+            )
+        ),
+        chapter = ChapterRule(
+            content = SelectorRule(
+                selector = "div.chp_raw",
+                type = "html"
+            ),
+            sanitize = SanitizeRule(
+                removeTags = listOf("script", "style", "iframe", "button"),
+                allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
+            )
+        )
+    )
+
+    val BUILTIN_DEFINITIONS: List<SourceDefinition> = listOf(ROYAL_ROAD, SCRIBBLE_HUB)
 }

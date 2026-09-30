@@ -34,7 +34,7 @@ import com.drnishanth.novellib.core.database.entities.UserProfileEntity
         SourceDefinitionEntity::class,
         SyncDeviceEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class NovelDatabase : RoomDatabase() {

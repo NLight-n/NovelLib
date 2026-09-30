@@ -18,6 +18,8 @@ import com.drnishanth.novellib.ui.profiles.ProfilePickerScreen
 import com.drnishanth.novellib.ui.profiles.ProfileViewModel
 import com.drnishanth.novellib.ui.reader.ReaderScreen
 import com.drnishanth.novellib.ui.reader.ReaderViewModel
+import com.drnishanth.novellib.ui.sources.SourcesScreen
+import com.drnishanth.novellib.ui.sources.SourcesViewModel
 
 @Composable
 fun NovelNavGraph(navController: NavHostController) {
@@ -53,7 +55,18 @@ fun NovelNavGraph(navController: NavHostController) {
                     navController.navigate(Screen.Profiles.route) {
                         popUpTo(Screen.Library.route) { inclusive = true }
                     }
+                },
+                onOpenSources = {
+                    navController.navigate(Screen.Sources.route)
                 }
+            )
+        }
+
+        composable(Screen.Sources.route) {
+            val sourcesVm: SourcesViewModel = viewModel()
+            SourcesScreen(
+                viewModel = sourcesVm,
+                onBack = { navController.popBackStack() }
             )
         }
 

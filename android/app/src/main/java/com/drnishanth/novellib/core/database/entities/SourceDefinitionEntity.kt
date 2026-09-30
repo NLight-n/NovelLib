@@ -37,6 +37,19 @@ data class SourceDefinitionEntity(
     @ColumnInfo(name = "json_content")
     val jsonContent: String,
 
+    // Rollback and health tracking fields
+    @ColumnInfo(name = "previous_version")
+    val previousVersion: Int? = null,
+
+    @ColumnInfo(name = "previous_json_content")
+    val previousJsonContent: String? = null,
+
+    @ColumnInfo(name = "previous_checksum")
+    val previousChecksum: String? = null,
+
+    @ColumnInfo(name = "consecutive_failures")
+    val consecutiveFailures: Int = 0,
+
     @ColumnInfo(name = "installed_at")
     val installedAt: Long = System.currentTimeMillis(),
 
