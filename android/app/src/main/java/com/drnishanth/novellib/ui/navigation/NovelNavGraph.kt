@@ -68,6 +68,9 @@ fun NovelNavGraph(
                 },
                 onOpenSources = {
                     navController.navigate(Screen.Sources.route)
+                },
+                onOpenSync = {
+                    navController.navigate(Screen.Sync.route)
                 }
             )
         }
@@ -76,6 +79,14 @@ fun NovelNavGraph(
             val sourcesVm: SourcesViewModel = viewModel()
             SourcesScreen(
                 viewModel = sourcesVm,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Sync.route) {
+            val syncVm: com.drnishanth.novellib.ui.sync.SyncViewModel = viewModel()
+            com.drnishanth.novellib.ui.sync.SyncScreen(
+                viewModel = syncVm,
                 onBack = { navController.popBackStack() }
             )
         }

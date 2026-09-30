@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwitchAccount
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -62,7 +63,8 @@ fun LibraryScreen(
     viewModel: LibraryViewModel,
     onNovelSelected: (String) -> Unit,
     onSwitchProfile: () -> Unit,
-    onOpenSources: () -> Unit = {}
+    onOpenSources: () -> Unit = {},
+    onOpenSync: () -> Unit = {}
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState()
     val novels by viewModel.novels.collectAsState()
@@ -110,6 +112,9 @@ fun LibraryScreen(
                     }
                     IconButton(onClick = onOpenSources) {
                         Icon(Icons.Default.CloudDownload, contentDescription = "Manage Sources")
+                    }
+                    IconButton(onClick = onOpenSync) {
+                        Icon(Icons.Default.Sync, contentDescription = "Sync Devices")
                     }
                     IconButton(onClick = {
                         viewModel.switchProfile()

@@ -10,6 +10,7 @@ import com.drnishanth.novellib.core.database.dao.NovelDao
 import com.drnishanth.novellib.core.database.dao.ReaderPreferencesDao
 import com.drnishanth.novellib.core.database.dao.ReadingProgressDao
 import com.drnishanth.novellib.core.database.dao.SourceDefinitionDao
+import com.drnishanth.novellib.core.database.dao.SyncDeviceDao
 import com.drnishanth.novellib.core.database.dao.UserProfileDao
 import com.drnishanth.novellib.core.database.entities.ChapterEntity
 import com.drnishanth.novellib.core.database.entities.LibraryEntryEntity
@@ -46,6 +47,7 @@ abstract class NovelDatabase : RoomDatabase() {
     abstract fun readerPreferencesDao(): ReaderPreferencesDao
     abstract fun sourceDefinitionDao(): SourceDefinitionDao
     abstract fun notificationDao(): NotificationDao
+    abstract fun syncDeviceDao(): SyncDeviceDao
 
     companion object {
         @Volatile

@@ -63,6 +63,47 @@ class NovelLibApplication : Application() {
         )
     }
 
+    val deviceIdentityManager: com.drnishanth.novellib.core.sync.security.DeviceIdentityManager by lazy {
+        com.drnishanth.novellib.core.sync.security.DeviceIdentityManager(this)
+    }
+
+    val syncRepository: com.drnishanth.novellib.core.sync.repository.SyncRepository by lazy {
+        val conflictEngine = com.drnishanth.novellib.core.sync.engine.ConflictResolutionEngine(
+            userProfileDao = database.userProfileDao(),
+            novelDao = database.novelDao(),
+            chapterDao = database.chapterDao(),
+            readingProgressDao = database.readingProgressDao(),
+            readerPreferencesDao = database.readerPreferencesDao()
+        )
+        val syncClient = com.drnishanth.novellib.core.sync.client.LocalSyncClient()
+        val syncServer = com.drnishanth.novellib.core.sync.server.LocalSyncServer(
+            context = this,
+            deviceIdentityManager = deviceIdentityManager,
+            syncDeviceDao = database.syncDeviceDao(),
+            conflictResolutionEngine = conflictEngine,
+            localPayloadProvider = {
+                val activeProfileId = profileRepository.activeProfile.value?.id
+                if (activeProfileId != null) {
+                    syncRepository.buildLocalPayload(activeProfileId)
+                } else null
+            }
+        )
+        val nsdManager = com.drnishanth.novellib.core.sync.discovery.NsdDiscoveryManager(this, deviceIdentityManager)
+        com.drnishanth.novellib.core.sync.repository.SyncRepository(
+            deviceIdentityManager = deviceIdentityManager,
+            syncDeviceDao = database.syncDeviceDao(),
+            userProfileDao = database.userProfileDao(),
+            novelDao = database.novelDao(),
+            chapterDao = database.chapterDao(),
+            readingProgressDao = database.readingProgressDao(),
+            readerPreferencesDao = database.readerPreferencesDao(),
+            conflictResolutionEngine = conflictEngine,
+            localSyncClient = syncClient,
+            localSyncServer = syncServer,
+            nsdDiscoveryManager = nsdManager
+        )
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
