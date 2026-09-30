@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "updated_at": 1727683200000,
+  "sources": [
+    {
+      "id": "royalroad",
+      "version": 1,
+      "name": "Royal Road",
+      "description": "Royal Road online web fiction platform",
+      "minimum_engine_version": 1,
+      "relative_path": "definitions/royalroad.json",
+      "checksum": "sha256:a481a80e0372ccc0df5b71aab1ceffd4bdf94c909b51158f10e657caa28c9e4d"
+    }
+  ]
+}

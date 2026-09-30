@@ -1,0 +1,82 @@
+{
+  "id": "royalroad",
+  "version": 1,
+  "name": "Royal Road",
+  "description": "Royal Road online web fiction platform",
+  "minimum_engine_version": 1,
+  "match": {
+    "hosts": [
+      "royalroad.com",
+      "www.royalroad.com"
+    ],
+    "url_patterns": [
+      "https://www.royalroad.com/fiction/*",
+      "https://royalroad.com/fiction/*"
+    ]
+  },
+  "requests": {
+    "default": {
+      "method": "GET",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
+      }
+    }
+  },
+  "novel": {
+    "title": {
+      "selector": "h1",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "author": {
+      "selector": "h4 a",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "description": {
+      "selector": ".description .description-content",
+      "type": "html",
+      "transform": ["trim"]
+    },
+    "cover": {
+      "selector": ".fiche-header img",
+      "type": "attribute",
+      "attribute": "src",
+      "transform": ["absolute_url"]
+    },
+    "status": {
+      "selector": ".fiction-info .label",
+      "type": "text",
+      "transform": ["trim"]
+    }
+  },
+  "chapters": {
+    "container": "#chapters tbody tr",
+    "title": {
+      "selector": "td:first-child a",
+      "type": "text",
+      "transform": ["trim"]
+    },
+    "url": {
+      "selector": "td:first-child a",
+      "type": "attribute",
+      "attribute": "href",
+      "transform": ["absolute_url"]
+    },
+    "published_at": {
+      "selector": "time",
+      "type": "attribute",
+      "attribute": "unixtimestamp"
+    }
+  },
+  "chapter": {
+    "content": {
+      "selector": ".chapter-content",
+      "type": "html"
+    },
+    "sanitize": {
+      "remove_tags": ["script", "style", "iframe", "button", "div.author-note-portlet"],
+      "allow_tags": ["p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote"]
+    }
+  }
+}

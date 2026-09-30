@@ -1,0 +1,1049 @@
+```
+android_app_spec:
+
+  app:
+    name: "Novel Library"
+    version: "0.1"
+    description: >
+      Local-first Android novel library and e-reader for personal/family use.
+      Users discover novels using a normal browser, share novel URLs to the
+      Android application, and read, track, download, and synchronize novels
+      across trusted Android devices.
+
+  goals:
+    - "Unified local library across multiple supported novel websites."
+    - "Add novels by sharing their URL from the normal browser."
+    - "Track reading progress per user profile."
+    - "Provide a customizable distraction-free reader."
+    - "Automatically detect new chapters."
+    - "Notify users when followed novels are updated."
+    - "Support multiple websites through remotely updateable source definitions."
+    - "Provide an e-ink-friendly experience for Bigme and similar devices."
+    - "Support online, offline, and hybrid chapter storage."
+    - "Synchronize selected profiles and library metadata between trusted devices on the same local network."
+    - "Keep the application local-first, simple, and suitable for personal/family use."
+
+  architecture:
+    style: "local-first Android application"
+
+    android:
+      language: "Kotlin"
+      ui: "Jetpack Compose"
+      architecture: "Repository + ViewModel"
+      database: "Room"
+      background_work: "WorkManager"
+      networking: "OkHttp"
+      html_parser: "Jsoup"
+      preferences: "DataStore"
+      notifications: "Android NotificationManager"
+      share:
+        intent: "ACTION_SEND"
+        accepted:
+          - "HTTP"
+          - "HTTPS"
+          - "text/plain"
+      role:
+        - "Library UI"
+        - "Novel/chapter browsing"
+        - "Reader"
+        - "Profile management"
+        - "Settings"
+        - "Source definition management"
+        - "Background update checking"
+        - "Notifications"
+        - "Local device synchronization"
+
+    optional:
+      webview:
+        enabled: true
+        purpose:
+          - "Open original source website when required."
+          - "Fallback for unsupported content."
+        not_used_for:
+          - "Primary reader"
+          - "Routine chapter rendering"
+
+      server:
+        enabled_by_default: false
+        purpose:
+          - "Optional future browser-based scraper for JavaScript-heavy websites."
+          - "Optional future remote synchronization."
+        note: >
+          The application must remain fully functional without a server.
+
+  storage_modes:
+
+    online:
+      description: >
+        Store novel and chapter metadata locally. Chapter content is downloaded
+        only when the user opens or explicitly requests a chapter.
+      chapter_content:
+        default: "not_downloaded"
+
+    offline:
+      description: >
+        Store selected or all chapter content locally for reading without
+        network connectivity.
+      chapter_content:
+        default: "downloaded"
+
+    hybrid:
+      description: >
+        Store a configurable subset of chapters locally while downloading
+        other chapters on demand.
+      policies:
+        - "latest_n_chapters"
+        - "latest_n_unread_chapters"
+        - "all_unread_chapters"
+        - "all_chapters"
+        - "manual_selection"
+
+  data_model:
+
+    UserProfile:
+      description: >
+        A local user identity used to separate libraries, reading progress,
+        preferences, notifications, and synchronized data. Profiles are local
+        identities and do not require an account on a central server.
+      fields:
+        - id
+        - username
+        - display_name
+        - avatar
+        - password_hash
+        - password_enabled
+        - created_at
+        - updated_at
+        - last_active_at
+      constraints:
+        username:
+          required: true
+          unique_per_device: true
+          format: "user-defined"
+        password:
+          optional: true
+          hashing: "Argon2id"
+      behavior:
+        - "The first profile is created during initial setup."
+        - "Additional profiles may be created on the same device."
+        - "If multiple profiles exist, show a profile-selection screen when the application starts."
+        - "Profile selection should resemble a simple family/shared-device profile picker."
+        - "Password protection is optional and configured per profile."
+        - "Profiles remain local unless explicitly synchronized to another trusted device."
+      privacy:
+        - "A profile cannot access another profile's private library data unless the user explicitly performs a synchronization operation."
+        - "Password hashes must never be synchronized as plaintext."
+        - "A profile's password may be re-established on another device rather than transferring the password hash."
+
+    Novel:
+      fields:
+        - id
+        - title
+        - author
+        - description
+        - cover_url
+        - status
+        - created_at
+        - updated_at
+
+    Source:
+      description: "A novel's representation on a specific website."
+      fields:
+        - id
+        - novel_id
+        - source_definition_id
+        - source_url
+        - external_id
+        - enabled
+        - last_checked_at
+        - last_successful_check_at
+        - last_error
+        - created_at
+        - updated_at
+
+    Chapter:
+      fields:
+        - id
+        - novel_id
+        - source_id
+        - chapter_number
+        - title
+        - source_url
+        - content
+        - content_hash
+        - published_at
+        - discovered_at
+        - download_state
+        - retention_policy
+        - downloaded_at
+        - updated_at
+
+      download_states:
+        - "not_downloaded"
+        - "queued"
+        - "downloading"
+        - "available"
+        - "failed"
+
+      retention_policies:
+        - "cache"
+        - "offline"
+
+    LibraryEntry:
+      description: "Associates a novel with a specific user profile."
+      fields:
+        - profile_id
+        - novel_id
+        - added_at
+        - notifications_enabled
+        - download_mode
+        - download_limit
+        - auto_download_enabled
+        - last_opened_at
+
+    ReadingProgress:
+      fields:
+        - profile_id
+        - novel_id
+        - chapter_id
+        - position
+        - progress_percent
+        - updated_at
+
+    ReaderPreferences:
+      fields:
+        - profile_id
+        - theme
+        - font_family
+        - font_size
+        - line_height
+        - content_width
+        - paragraph_spacing
+        - margins
+        - animation_enabled
+        - page_navigation_mode
+
+    Notification:
+      fields:
+        - id
+        - profile_id
+        - novel_id
+        - chapter_id
+        - type
+        - message
+        - read
+        - created_at
+
+    SourceDefinition:
+      description: >
+        A remotely updateable, declarative definition describing how the
+        generic scraper engine identifies and extracts content from a website.
+        Source definitions must not contain executable Android code.
+
+      fields:
+        - id
+        - version
+        - name
+        - description
+        - enabled
+        - minimum_engine_version
+        - definition_url
+        - checksum
+        - signature
+        - installed_at
+        - updated_at
+
+    SyncDevice:
+      description: "A trusted Android device known to the local application."
+      fields:
+        - id
+        - device_name
+        - device_id
+        - device_type
+        - app_version
+        - sync_protocol_version
+        - last_seen_at
+        - trusted
+        - created_at
+
+  user_profiles:
+
+    behavior:
+      first_launch:
+        - "Show profile creation screen."
+        - "Require username."
+        - "Allow optional password protection."
+        - "Create the local profile."
+        - "Open the library."
+
+      multiple_profiles:
+        - "Show a profile-selection screen when the application starts."
+        - "Display username/display name and avatar."
+        - "Allow selecting a profile."
+        - "Allow adding a new profile."
+        - "Allow profile management from settings."
+
+      greeting:
+        example: "Hi @username"
+
+    profile_isolation:
+      library:
+        - "Each profile has its own library entries."
+        - "A novel may belong to multiple profiles."
+      progress:
+        - "Reading progress is per profile."
+      preferences:
+        - "Reader preferences are per profile."
+      notifications:
+        - "Notification preferences are per profile."
+      downloads:
+        description: >
+          Downloaded chapter content is shared at the device storage level
+          when possible because chapter content itself is not user-specific.
+          Ownership and library membership remain profile-specific.
+
+    optional_password:
+      enabled_by_default: false
+      hashing: "Argon2id"
+      requirements:
+        - "Password verification must be performed locally."
+        - "Do not store plaintext passwords."
+        - "Allow users to enable or disable profile protection."
+        - "Allow password-protected profiles to coexist with unprotected profiles."
+
+  source_definitions:
+
+    purpose: >
+      Allow website support to be added or fixed without requiring a new APK,
+      while keeping the Android application itself responsible for all scraping
+      execution.
+
+    architecture:
+      permanent_android_component:
+        name: "SourceDefinitionEngine"
+        responsibility:
+          - "Download web pages."
+          - "Parse HTML."
+          - "Parse JSON."
+          - "Apply selectors."
+          - "Apply transformations."
+          - "Normalize extracted data."
+          - "Execute pagination rules."
+          - "Apply request configuration."
+          - "Validate extracted results."
+
+      remote_component:
+        name: "SourceDefinitionRepository"
+        responsibility:
+          - "Publish source definitions."
+          - "Publish updated versions."
+          - "Publish checksums."
+          - "Publish signatures."
+          - "Maintain compatibility information."
+
+      rule: >
+        Source definitions are declarative configuration and must never contain
+        arbitrary executable Kotlin, Java, JavaScript, native code, or Android
+        components.
+
+    definition_format:
+      format: "JSON"
+      versioned: true
+      example:
+        id: "example-site"
+        version: 4
+        name: "Example Site"
+        minimum_engine_version: 1
+        match:
+          hosts:
+            - "example.com"
+          url_patterns:
+            - "https://example.com/novel/*"
+
+        requests:
+          default:
+            method: "GET"
+            headers:
+              User-Agent: "NovelLibrary"
+
+        novel:
+          title:
+            selector: "h1.novel-title"
+            type: "text"
+
+          author:
+            selector: ".author"
+            type: "text"
+
+          description:
+            selector: ".description"
+            type: "text"
+
+          cover:
+            selector: "img.cover"
+            type: "attribute"
+            attribute: "src"
+
+        chapters:
+          container: "ul.chapter-list li"
+
+          title:
+            selector: "a"
+            type: "text"
+
+          url:
+            selector: "a"
+            type: "attribute"
+            attribute: "href"
+
+        chapter:
+          content:
+            selector: ".chapter-content"
+            type: "html"
+
+    supported_operations:
+      selectors:
+        - "CSS selectors"
+        - "XPath"
+
+      extraction:
+        - "text"
+        - "HTML"
+        - "attribute"
+        - "URL"
+
+      transformations:
+        - "trim"
+        - "replace"
+        - "regex_replace"
+        - "decode_html"
+        - "normalize_whitespace"
+        - "absolute_url"
+
+      structured_data:
+        - "JSON path extraction"
+        - "HTML data attributes"
+
+      requests:
+        - "GET"
+        - "POST only where explicitly supported by the engine"
+        - "custom headers"
+        - "query parameters"
+        - "pagination"
+
+      pagination:
+        strategies:
+          - "next_link"
+          - "page_parameter"
+          - "offset_parameter"
+          - "cursor"
+
+    adapter_capability_levels:
+
+      level_1:
+        name: "HTML"
+        supported:
+          - "HTTP requests"
+          - "HTML parsing"
+          - "CSS selectors"
+          - "XPath"
+
+      level_2:
+        name: "Advanced declarative"
+        supported:
+          - "JSON extraction"
+          - "Pagination"
+          - "Transformations"
+          - "Multiple requests"
+          - "Custom headers"
+          - "Structured data extraction"
+
+      level_3:
+        name: "Browser required"
+        supported: false
+        behavior: >
+          If a source requires JavaScript/browser execution that cannot be
+          represented by the declarative engine, mark the source as requiring
+          browser support. The Android application should report that the
+          source is currently unsupported rather than executing downloaded
+          arbitrary code.
+
+    security:
+      requirements:
+        - "Never execute downloaded source-definition code."
+        - "Validate source definitions against a strict JSON schema."
+        - "Verify checksum before installation."
+        - "Verify publisher signature before activation."
+        - "Reject incompatible engine versions."
+        - "Keep previous working definition versions for rollback."
+        - "Do not allow source definitions to access Android APIs."
+        - "Restrict HTTP requests according to source-definition permissions."
+
+    update_flow:
+      - "Application periodically checks the source-definition registry."
+      - "Registry returns available definition versions."
+      - "Application compares installed versions."
+      - "Application downloads newer definitions."
+      - "Application verifies checksum."
+      - "Application verifies signature."
+      - "Application validates the definition schema."
+      - "Application installs the new definition."
+      - "Application retains the previous definition for rollback."
+      - "Application activates the new version."
+      - "If repeated failures occur, the application may fall back to the previous known-good version."
+
+    registry:
+      example:
+        version: 42
+        definitions:
+          - id: "site-a"
+            version: 8
+            url: "..."
+            checksum: "sha256:..."
+            signature: "..."
+          - id: "site-b"
+            version: 3
+            url: "..."
+            checksum: "sha256:..."
+            signature: "..."
+
+    testing:
+      requirements:
+        - "Each source definition should have representative test URLs."
+        - "Test fixtures should contain saved HTML/JSON responses where licensing permits."
+        - "Definitions should be validated before publication."
+        - "Failed production extraction should be logged locally."
+        - "Source-specific parsing logic must remain outside the core application."
+
+  scraping:
+
+    engine:
+      name: "SourceDefinitionEngine"
+      default_transport: "OkHttp"
+      html_parser: "Jsoup"
+
+    flow:
+      identify:
+        input: "URL"
+        output:
+          - "source definition"
+          - "confidence"
+
+      get_novel:
+        output: "normalized novel metadata"
+
+      discover_chapters:
+        output: "normalized chapter metadata"
+
+      get_chapter:
+        output: "normalized chapter content"
+
+      check_updates:
+        output: "new chapters"
+
+    rules:
+      - "Use normal HTTP parsing whenever possible."
+      - "Keep website-specific behavior in source definitions."
+      - "Rate-limit requests per website."
+      - "Avoid duplicate downloads."
+      - "Store content hashes for duplicate detection."
+      - "Do not delete existing content because a source temporarily fails."
+      - "Use cached chapter content when the source is unavailable."
+      - "Respect source website terms and applicable laws."
+
+  reader:
+
+    features:
+      - "Light theme"
+      - "Dark theme"
+      - "Sepia theme"
+      - "E-ink theme"
+      - "Font selection"
+      - "Font size"
+      - "Line height"
+      - "Content width"
+      - "Paragraph spacing"
+      - "Chapter navigation"
+      - "Resume reading"
+      - "Reading progress"
+      - "Download chapter"
+      - "Download novel"
+      - "Delete downloaded content"
+
+    eink:
+      requirements:
+        - "High contrast"
+        - "Minimal animation"
+        - "Large touch targets"
+        - "Minimal JavaScript"
+        - "Avoid unnecessary re-rendering"
+        - "Prefer static/native Compose rendering"
+        - "Support grayscale-friendly themes"
+        - "Avoid rapidly changing UI elements"
+        - "Allow manual screen refresh where useful"
+        - "Provide simple navigation controls"
+
+    content:
+      representation: "normalized chapter content"
+      principle: >
+        The reader must not depend on the original website's CSS or JavaScript.
+        Source-specific HTML should be normalized before rendering.
+
+  download_manager:
+
+    policies:
+      per_novel:
+        - "online"
+        - "offline"
+        - "hybrid"
+
+      hybrid:
+        options:
+          - "latest_n_chapters"
+          - "latest_n_unread_chapters"
+          - "all_unread_chapters"
+          - "manual_selection"
+
+    behavior:
+      - "Do not redownload content when content_hash is unchanged."
+      - "Resume or retry interrupted downloads where practical."
+      - "Respect Wi-Fi-only preference."
+      - "Respect battery constraints."
+      - "Allow manual download requests."
+      - "Allow manual deletion of downloaded chapters."
+      - "Keep explicitly offline chapters until the user deletes them."
+      - "Allow cache chapters to be removed automatically according to retention policy."
+
+  background_tasks:
+
+    framework: "WorkManager"
+
+    tasks:
+
+      update_check:
+        purpose: "Check followed novels for new chapters."
+        constraints:
+          - "Network available"
+        behavior:
+          - "Respect per-source rate limits."
+          - "Use exponential backoff for failures."
+          - "Do not require exact execution time."
+          - "Store last successful check time."
+
+      chapter_download:
+        purpose: "Download requested or automatically selected chapters."
+        constraints:
+          - "Network available"
+        behavior:
+          - "Respect Wi-Fi-only preference."
+          - "Retry transient failures."
+          - "Avoid duplicate downloads."
+
+      source_definition_update:
+        purpose: "Check and update source definitions."
+        constraints:
+          - "Network available"
+
+      cache_cleanup:
+        purpose: "Remove expired cache content according to retention policy."
+
+    android_constraints:
+      note: >
+        Periodic work is best-effort because Android controls background
+        execution timing. The application must not promise exact periodic
+        execution times.
+
+  notifications:
+
+    channels:
+      - "in_app"
+      - "android_notification"
+
+    events:
+      - "new_chapter"
+      - "download_completed"
+      - "download_failed"
+      - "source_update_failed"
+      - "sync_completed"
+      - "sync_failed"
+
+    rules:
+      - "Only notify profiles following the affected novel."
+      - "Respect per-novel notification settings."
+      - "Prevent duplicate notifications."
+      - "Allow notification configuration per profile."
+
+  network_app_sync:
+
+    purpose: >
+      Synchronize selected profiles and library metadata between trusted
+      Android devices connected to the same local network, without requiring
+      a central server.
+
+    principles:
+      - "Local-first."
+      - "Explicit user initiated."
+      - "Trusted-device based."
+      - "No internet server required."
+      - "Synchronize metadata before large chapter content."
+      - "Allow content synchronization separately."
+      - "Never silently expose one profile's private library to another device."
+
+    example:
+      phone:
+        profile: "@alice"
+        library:
+          - "Novel A"
+          - "Novel B"
+          - "Novel C"
+
+      tablet:
+        profiles:
+          - "@bob"
+
+      sync:
+        action: "Send @alice to tablet"
+
+      result:
+        tablet_profiles:
+          - "@bob"
+          - "@alice"
+
+        alice:
+          library:
+            - "Novel A"
+            - "Novel B"
+            - "Novel C"
+
+    discovery:
+      mechanism:
+        - "mDNS/NSD"
+        - "local network service discovery"
+
+      requirements:
+        - "Devices advertise the sync service only while sync mode is active."
+        - "Users can manually select discovered devices."
+        - "Users must explicitly trust a device before synchronization."
+        - "Do not automatically synchronize merely because devices are on the same network."
+
+    pairing:
+      flow:
+        - "User selects Sync on Device A."
+        - "Device A discovers Device B on the local network."
+        - "User selects Device B."
+        - "Both devices display a pairing code or confirmation."
+        - "User confirms the same code on both devices."
+        - "Devices establish a trusted relationship."
+        - "Future synchronization may use the established trust relationship."
+
+      credentials:
+        - "Generate a device identity key pair."
+        - "Store private key in Android Keystore where practical."
+        - "Store trusted device public keys locally."
+        - "Do not use usernames or passwords as device authentication."
+
+    transport:
+      protocol: "HTTPS over local network"
+      discovery: "mDNS/NSD"
+      requirements:
+        - "Use authenticated encrypted connections."
+        - "Reject untrusted devices."
+        - "Do not transmit synchronization data over unauthenticated HTTP."
+        - "Support devices changing local IP addresses."
+
+    sync_scope:
+
+      profile:
+        transferable:
+          - "username"
+          - "display_name"
+          - "avatar"
+          - "profile settings"
+          - "reader preferences"
+          - "notification preferences"
+          - "library entries"
+          - "reading progress"
+          - "download policies"
+
+        not_transferable_by_default:
+          - "password hash"
+          - "private cryptographic keys"
+          - "device-specific settings"
+
+      library_metadata:
+        transferable:
+          - "novel metadata"
+          - "source metadata"
+          - "source URL"
+          - "source definition ID"
+          - "source definition version"
+          - "chapter metadata"
+          - "chapter numbers"
+          - "chapter titles"
+          - "published dates"
+          - "download state"
+          - "reading progress"
+
+      chapter_content:
+        default: "not_synced"
+
+        optional:
+          enabled: true
+          modes:
+            - "selected_chapters"
+            - "unread_chapters"
+            - "offline_chapters"
+            - "entire_novel"
+
+        principle: >
+          Metadata synchronization should happen independently from chapter
+          content synchronization so a library can be transferred with minimal
+          network traffic and storage usage.
+
+    synchronization_model:
+      type: "bidirectional metadata synchronization"
+
+      conflict_resolution:
+        library_membership:
+          strategy: "union"
+        reading_progress:
+          strategy: "latest_updated_at"
+        reader_preferences:
+          strategy: "latest_updated_at"
+        notification_preferences:
+          strategy: "latest_updated_at"
+        novel_metadata:
+          strategy: "prefer_source_with_latest_successful_fetch"
+        chapter_content:
+          strategy: "content_hash"
+
+      requirements:
+        - "Synchronize using stable IDs."
+        - "Do not create duplicate novels when the same source URL is present."
+        - "Use content hashes to identify identical chapter content."
+        - "Maintain updated_at timestamps."
+        - "Record sync errors without deleting local data."
+        - "Never delete local content solely because it is absent on another device."
+
+    profile_import:
+      behavior:
+        - "If the synchronized username does not exist on the destination device, create the profile."
+        - "If the username already exists, ask the user whether to merge or replace."
+        - "Never silently overwrite an existing profile."
+        - "Require explicit confirmation before importing a profile."
+
+      password:
+        behavior:
+          - "Do not transfer password hashes by default."
+          - "If the source profile is password-protected, the destination user must configure a local password after import."
+          - "The imported profile may remain locked until a local password is configured."
+
+    sync_ui:
+      screens:
+        - "Nearby Devices"
+        - "Trusted Devices"
+        - "Sync Profile"
+        - "Select Data"
+        - "Sync Progress"
+        - "Sync Result"
+
+      actions:
+        - "Send profile"
+        - "Receive profile"
+        - "Sync metadata"
+        - "Sync selected chapters"
+        - "Sync offline chapters"
+        - "Forget device"
+
+    sync_safety:
+      requirements:
+        - "Always show which profile is being synchronized."
+        - "Always show destination device."
+        - "Require confirmation before importing."
+        - "Do not delete destination data during a normal sync."
+        - "Provide a separate explicit 'Replace' operation if ever implemented."
+        - "Allow users to cancel a sync."
+        - "Maintain a sync log."
+
+  permissions:
+
+    application:
+      required:
+        - "INTERNET"
+        - "POST_NOTIFICATIONS where required by Android version"
+
+      conditional:
+        - "NEARBY_WIFI_DEVICES where required by Android version"
+        - "ACCESS_NETWORK_STATE"
+
+    storage:
+      principle: >
+        Prefer Android app-private storage and Storage Access Framework rather
+        than requesting broad filesystem access.
+
+  security:
+
+    local_profiles:
+      password_hashing: "Argon2id"
+
+    sync:
+      - "Device authentication required."
+      - "Encrypted transport required."
+      - "Device trust must be explicitly established."
+      - "Use Android Keystore for device private keys where practical."
+      - "Never trust arbitrary LAN clients."
+      - "Never expose the synchronization API to the public internet."
+
+    source_definitions:
+      - "Definitions must be signed."
+      - "Definitions must pass schema validation."
+      - "Downloaded definitions must not execute arbitrary code."
+
+    data:
+      - "Keep application data in Android private storage."
+      - "Avoid unnecessary external storage permissions."
+      - "Do not log passwords or private profile information."
+      - "Do not log complete chapter content."
+
+  project_structure:
+
+    - "android/"
+    - "android/app/"
+    - "android/core/"
+    - "android/core/database/"
+    - "android/core/network/"
+    - "android/core/preferences/"
+    - "android/core/notifications/"
+    - "android/core/security/"
+    - "android/core/sync/"
+    - "android/data/"
+    - "android/data/novels/"
+    - "android/data/chapters/"
+    - "android/data/profiles/"
+    - "android/data/sources/"
+    - "android/scraping/"
+    - "android/scraping/engine/"
+    - "android/scraping/models/"
+    - "android/scraping/validation/"
+    - "android/downloads/"
+    - "android/background/"
+    - "android/background/workers/"
+    - "android/reader/"
+    - "android/ui/"
+    - "android/ui/library/"
+    - "android/ui/reader/"
+    - "android/ui/profiles/"
+    - "android/ui/settings/"
+    - "android/ui/sync/"
+    - "android/ui/sources/"
+    - "tests/"
+
+  development:
+
+    build:
+      tool: "Gradle"
+
+    language:
+      kotlin: true
+
+    ui:
+      compose: true
+
+    testing:
+      required:
+        - "Unit tests"
+        - "Room database tests"
+        - "Source definition engine tests"
+        - "Source definition validation tests"
+        - "Scraper fixture tests"
+        - "Reader tests"
+        - "Library/import flow tests"
+        - "WorkManager tests"
+        - "Download manager tests"
+        - "Profile tests"
+        - "Network synchronization tests"
+        - "Conflict resolution tests"
+
+  implementation_priorities:
+
+    phase_1:
+      - "Android project foundation"
+      - "Jetpack Compose"
+      - "Room database"
+      - "First-launch profile creation"
+      - "Multiple local profiles"
+      - "Basic library"
+      - "One hardcoded/test source definition"
+      - "URL sharing/import"
+      - "Basic scraper engine"
+      - "Basic reader"
+
+    phase_2:
+      - "Remote source-definition repository"
+      - "Source definition validation"
+      - "Source definition versioning"
+      - "Checksum/signature verification"
+      - "Source definition rollback"
+      - "Additional website definitions"
+
+    phase_3:
+      - "Reading progress"
+      - "Reader preferences"
+      - "Online/offline/hybrid storage"
+      - "Download manager"
+      - "Manual chapter/novel downloads"
+      - "Automatic retention policies"
+
+    phase_4:
+      - "WorkManager update checks"
+      - "Automatic new chapter detection"
+      - "Android notifications"
+      - "Background downloads"
+
+    phase_5:
+      - "Local network device discovery"
+      - "Device pairing and trust"
+      - "Profile synchronization"
+      - "Library metadata synchronization"
+      - "Reading progress synchronization"
+
+    phase_6:
+      - "Optional chapter-content synchronization"
+      - "Bigme/e-ink optimizations"
+      - "Additional source definitions"
+      - "Source monitoring and diagnostics"
+
+    phase_7:
+      - "Optional server-side browser scraper"
+      - "Optional remote synchronization"
+      - "Only if real-world requirements justify additional infrastructure"
+
+  design_principles:
+
+    - "Android is the primary and complete application."
+    - "Local-first is the default architecture."
+    - "The normal browser is used for discovering novels."
+    - "Android receives novel URLs through the Android share mechanism."
+    - "The backend/server is not required for normal operation."
+    - "The generic scraper engine is permanent application code."
+    - "Website-specific behavior belongs in source definitions."
+    - "Source definitions are declarative and remotely updateable."
+    - "Never execute arbitrary downloaded adapter code."
+    - "HTTP scraping is preferred over browser automation."
+    - "Browser automation is an optional future capability."
+    - "The native reader is independent of source website CSS and JavaScript."
+    - "Chapter content is normalized before rendering."
+    - "Profiles are local identities rather than server accounts."
+    - "Multiple profiles can coexist on one device."
+    - "Profile passwords are optional."
+    - "Library membership and reading progress are profile-specific."
+    - "Downloaded chapter content may be shared by profiles on the same device."
+    - "Device synchronization is explicit and trust-based."
+    - "Same-network presence must never imply trust."
+    - "Metadata synchronization is independent from chapter-content synchronization."
+    - "Normal synchronization must never delete local content."
+    - "Optimize the reader for e-ink devices."
+    - "Prefer simplicity, reliability, and maintainability."
+    - "Do not introduce a server unless future requirements justify it."
+    - "Respect website terms and applicable copyright laws."
+```
