@@ -45,6 +45,21 @@ interface ChapterDao {
         updatedAt: Long = System.currentTimeMillis()
     )
 
+    @Query("UPDATE chapters SET retention_policy = :policy WHERE id = :chapterId")
+    suspend fun updateRetentionPolicy(chapterId: String, policy: String)
+
+    @Query("SELECT * FROM chapters WHERE download_state = 'queued' ORDER BY discovered_at ASC")
+    suspend fun getQueuedChapters(): List<ChapterEntity>
+
+    @Query("SELECT * FROM chapters WHERE retention_policy = 'cache' AND download_state = 'available' ORDER BY downloaded_at ASC")
+    suspend fun getCachedChaptersSortedByDownloadedAt(): List<ChapterEntity>
+
+    @Query("SELECT * FROM chapters WHERE novel_id = :novelId AND chapter_number > :chapterNumber ORDER BY chapter_number ASC LIMIT :limit")
+    suspend fun getChaptersAfterNumber(novelId: String, chapterNumber: Int, limit: Int): List<ChapterEntity>
+
+    @Query("SELECT * FROM chapters WHERE novel_id = :novelId ORDER BY chapter_number DESC LIMIT :limit")
+    suspend fun getLatestChapters(novelId: String, limit: Int): List<ChapterEntity>
+
     @Query("SELECT COUNT(*) FROM chapters WHERE novel_id = :novelId")
     suspend fun getChapterCountForNovel(novelId: String): Int
 

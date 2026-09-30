@@ -14,28 +14,37 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -43,7 +52,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.drnishanth.novellib.core.database.entities.ReaderPreferencesEntity
 import com.drnishanth.novellib.ui.theme.NovelLibTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +64,33 @@ fun ReaderScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val prefs = uiState.preferences
+    var showSettingsSheet by remember { mutableStateOf(false) }
+
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = uiState.initialScrollIndex
+    )
+
+    // Save reading position when user scrolls
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collect { index ->
+                viewModel.saveScrollIndex(index)
+            }
+    }
+
+    // Scroll to initial saved position when chapter loads
+    LaunchedEffect(uiState.initialScrollIndex) {
+        if (uiState.initialScrollIndex > 0 && uiState.initialScrollIndex < uiState.paragraphs.size) {
+            listState.scrollToItem(uiState.initialScrollIndex)
+        }
+    }
+
+    val selectedFontFamily = when (prefs.fontFamily.lowercase()) {
+        "sans" -> FontFamily.SansSerif
+        "mono" -> FontFamily.Monospace
+        else -> FontFamily.Serif
+    }
 
     NovelLibTheme(themeName = prefs.theme) {
         Scaffold(
@@ -71,6 +109,27 @@ fun ReaderScreen(
                                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                             }
                         },
+                        actions = {
+                            val isDownloaded = uiState.currentChapter?.downloadState == "available"
+                            IconButton(
+                                onClick = {
+                                    if (isDownloaded) {
+                                        viewModel.deleteCurrentChapter()
+                                    } else {
+                                        viewModel.downloadCurrentChapter()
+                                    }
+                                }
+                            ) {
+                                if (isDownloaded) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = "Downloaded", tint = MaterialTheme.colorScheme.primary)
+                                } else {
+                                    Icon(Icons.Default.Download, contentDescription = "Download Chapter")
+                                }
+                            }
+                            IconButton(onClick = { showSettingsSheet = true }) {
+                                Icon(Icons.Default.Tune, contentDescription = "Reader Settings")
+                            }
+                        },
                         colors = TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface
                         )
@@ -80,7 +139,7 @@ fun ReaderScreen(
             bottomBar = {
                 if (uiState.showControls) {
                     ReaderControlsBottomBar(
-                        currentTheme = prefs.theme,
+                        preferences = prefs,
                         onThemeChanged = { viewModel.updateTheme(it) },
                         onFontSizeChanged = { viewModel.updateFontSize(it) }
                     )
@@ -91,12 +150,6 @@ fun ReaderScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        viewModel.toggleControls()
-                    }
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
@@ -132,9 +185,16 @@ fun ReaderScreen(
                     }
                 } else {
                     LazyColumn(
+                        state = listState,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = prefs.margins.dp, vertical = 12.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                viewModel.toggleControls()
+                            }
                     ) {
                         item {
                             uiState.currentChapter?.let { chapter ->
@@ -142,19 +202,19 @@ fun ReaderScreen(
                                     text = chapter.title,
                                     fontSize = (prefs.fontSize + 4).sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Serif,
+                                    fontFamily = selectedFontFamily,
                                     color = MaterialTheme.colorScheme.onBackground,
                                     modifier = Modifier.padding(bottom = 20.dp, top = 8.dp)
                                 )
                             }
                         }
 
-                        items(uiState.paragraphs) { paragraph ->
+                        itemsIndexed(uiState.paragraphs) { _, paragraph ->
                             Text(
                                 text = paragraph,
                                 fontSize = prefs.fontSize.sp,
                                 lineHeight = (prefs.fontSize * prefs.lineHeight).sp,
-                                fontFamily = FontFamily.Serif,
+                                fontFamily = selectedFontFamily,
                                 color = MaterialTheme.colorScheme.onBackground,
                                 modifier = Modifier.padding(bottom = prefs.paragraphSpacing.dp)
                             )
@@ -194,6 +254,17 @@ fun ReaderScreen(
                         }
                     }
                 }
+
+                // Advanced Reader Settings Sheet
+                if (showSettingsSheet) {
+                    ReaderSettingsBottomSheet(
+                        preferences = prefs,
+                        onDismiss = { showSettingsSheet = false },
+                        onFontFamilySelected = { viewModel.updateFontFamily(it) },
+                        onLineHeightSelected = { viewModel.updateLineHeight(it) },
+                        onNavigationModeSelected = { viewModel.updateNavigationMode(it) }
+                    )
+                }
             }
         }
     }
@@ -201,7 +272,7 @@ fun ReaderScreen(
 
 @Composable
 fun ReaderControlsBottomBar(
-    currentTheme: String,
+    preferences: ReaderPreferencesEntity,
     onThemeChanged: (String) -> Unit,
     onFontSizeChanged: (Float) -> Unit
 ) {
@@ -222,7 +293,7 @@ fun ReaderControlsBottomBar(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Font Size",
+                    text = "Font Size: ${preferences.fontSize.toInt()}sp",
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -246,7 +317,7 @@ fun ReaderControlsBottomBar(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Theme Options: Light, Dark, Sepia, E-Ink
+            // Themes: Light, Dark, Sepia, E-Ink
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -260,13 +331,104 @@ fun ReaderControlsBottomBar(
 
                 themes.forEach { (key, label) ->
                     FilterChip(
-                        selected = currentTheme.equals(key, ignoreCase = true),
+                        selected = preferences.theme.equals(key, ignoreCase = true),
                         onClick = { onThemeChanged(key) },
                         label = { Text(label, fontSize = 12.sp) },
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ReaderSettingsBottomSheet(
+    preferences: ReaderPreferencesEntity,
+    onDismiss: () -> Unit,
+    onFontFamilySelected: (String) -> Unit,
+    onLineHeightSelected: (Float) -> Unit,
+    onNavigationModeSelected: (String) -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "Reader Settings",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Font Family
+            Text("Font Family", style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val fonts = listOf("serif" to "Serif", "sans" to "Sans", "mono" to "Monospace")
+                fonts.forEach { (key, label) ->
+                    FilterChip(
+                        selected = preferences.fontFamily.equals(key, ignoreCase = true),
+                        onClick = { onFontFamilySelected(key) },
+                        label = { Text(label, fontSize = 12.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Line Height
+            Text("Line Height", style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val heights = listOf(1.4f to "Compact", 1.6f to "Normal", 1.8f to "Spacious")
+                heights.forEach { (h, label) ->
+                    FilterChip(
+                        selected = preferences.lineHeight == h,
+                        onClick = { onLineHeightSelected(h) },
+                        label = { Text(label, fontSize = 12.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Navigation Mode: Scroll vs Paging
+            Text("Navigation Mode", style = MaterialTheme.typography.bodyMedium)
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val modes = listOf("scroll" to "Continuous Scroll", "paging" to "Page Turns")
+                modes.forEach { (mode, label) ->
+                    FilterChip(
+                        selected = preferences.pageNavigationMode.equals(mode, ignoreCase = true),
+                        onClick = { onNavigationModeSelected(mode) },
+                        label = { Text(label, fontSize = 12.sp) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

@@ -7,6 +7,8 @@ import com.drnishanth.novellib.core.database.entities.ChapterEntity
 import com.drnishanth.novellib.core.database.entities.ReaderPreferencesEntity
 import com.drnishanth.novellib.data.repository.NovelRepository
 import com.drnishanth.novellib.data.repository.ProfileRepository
+import com.drnishanth.novellib.downloads.DownloadManager
+import com.drnishanth.novellib.downloads.models.RetentionPolicy
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,6 +24,7 @@ data class ReaderUiState(
     val paragraphs: List<String> = emptyList(),
     val errorMessage: String? = null,
     val showControls: Boolean = false,
+    val initialScrollIndex: Int = 0,
     val preferences: ReaderPreferencesEntity = ReaderPreferencesEntity(profileId = "")
 )
 
@@ -29,7 +32,8 @@ class ReaderViewModel(
     val novelId: String,
     initialChapterId: String,
     private val novelRepository: NovelRepository = NovelLibApplication.instance.novelRepository,
-    private val profileRepository: ProfileRepository = NovelLibApplication.instance.profileRepository
+    private val profileRepository: ProfileRepository = NovelLibApplication.instance.profileRepository,
+    private val downloadManager: DownloadManager = NovelLibApplication.instance.downloadManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ReaderUiState())
@@ -38,8 +42,8 @@ class ReaderViewModel(
     private var allChapters: List<ChapterEntity> = emptyList()
 
     init {
-        loadChapter(initialChapterId)
         loadPreferences()
+        loadChapter(initialChapterId)
     }
 
     private fun loadPreferences() {
@@ -66,6 +70,16 @@ class ReaderViewModel(
             val prevId = if (currentIndex > 0) allChapters[currentIndex - 1].id else null
             val nextId = if (currentIndex in 0 until allChapters.size - 1) allChapters[currentIndex + 1].id else null
 
+            // Check if there is saved reading progress for this chapter
+            val profileId = profileRepository.activeProfile.value?.id
+            var savedPos = 0
+            if (profileId != null) {
+                val progress = novelRepository.getReadingProgress(profileId, novelId).firstOrNull()
+                if (progress != null && progress.chapterId == chapterId) {
+                    savedPos = progress.position
+                }
+            }
+
             val contentResult = novelRepository.loadChapterContent(chapterId)
             if (contentResult.isSuccess) {
                 val html = contentResult.getOrNull() ?: ""
@@ -76,11 +90,11 @@ class ReaderViewModel(
                     currentChapter = currentChapter,
                     previousChapterId = prevId,
                     nextChapterId = nextId,
-                    paragraphs = parsedParagraphs
+                    paragraphs = parsedParagraphs,
+                    initialScrollIndex = savedPos
                 )
 
-                // Save reading progress
-                val profileId = profileRepository.activeProfile.value?.id
+                // Save/update progress to current chapter
                 if (profileId != null && currentChapter != null) {
                     val percent = if (allChapters.isNotEmpty()) {
                         (currentIndex + 1).toFloat() / allChapters.size.toFloat()
@@ -89,7 +103,7 @@ class ReaderViewModel(
                         profileId = profileId,
                         novelId = novelId,
                         chapterId = chapterId,
-                        position = 0,
+                        position = savedPos,
                         progressPercent = percent
                     )
                 }
@@ -105,6 +119,23 @@ class ReaderViewModel(
         }
     }
 
+    fun saveScrollIndex(index: Int) {
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        val chapterId = _uiState.value.currentChapter?.id ?: return
+        val totalParagraphs = _uiState.value.paragraphs.size
+        val percent = if (totalParagraphs > 0) (index.toFloat() / totalParagraphs).coerceIn(0f, 1f) else 0f
+
+        viewModelScope.launch {
+            novelRepository.saveReadingProgress(
+                profileId = profileId,
+                novelId = novelId,
+                chapterId = chapterId,
+                position = index,
+                progressPercent = percent
+            )
+        }
+    }
+
     fun toggleControls() {
         _uiState.value = _uiState.value.copy(showControls = !_uiState.value.showControls)
     }
@@ -116,10 +147,42 @@ class ReaderViewModel(
     }
 
     fun updateFontSize(delta: Float) {
-        val newSize = (_uiState.value.preferences.fontSize + delta).coerceIn(12f, 32f)
+        val newSize = (_uiState.value.preferences.fontSize + delta).coerceIn(12f, 36f)
         val updated = _uiState.value.preferences.copy(fontSize = newSize)
         _uiState.value = _uiState.value.copy(preferences = updated)
         savePrefs(updated)
+    }
+
+    fun updateFontFamily(family: String) {
+        val updated = _uiState.value.preferences.copy(fontFamily = family)
+        _uiState.value = _uiState.value.copy(preferences = updated)
+        savePrefs(updated)
+    }
+
+    fun updateLineHeight(height: Float) {
+        val updated = _uiState.value.preferences.copy(lineHeight = height)
+        _uiState.value = _uiState.value.copy(preferences = updated)
+        savePrefs(updated)
+    }
+
+    fun updateNavigationMode(mode: String) {
+        val updated = _uiState.value.preferences.copy(pageNavigationMode = mode)
+        _uiState.value = _uiState.value.copy(preferences = updated)
+        savePrefs(updated)
+    }
+
+    fun downloadCurrentChapter() {
+        val chapter = _uiState.value.currentChapter ?: return
+        downloadManager.enqueueChapter(chapter.id, RetentionPolicy.OFFLINE)
+    }
+
+    fun deleteCurrentChapter() {
+        val chapter = _uiState.value.currentChapter ?: return
+        viewModelScope.launch {
+            downloadManager.deleteDownloadedChapter(chapter.id)
+            val updated = novelRepository.getChapter(chapter.id)
+            _uiState.value = _uiState.value.copy(currentChapter = updated)
+        }
     }
 
     private fun savePrefs(prefs: ReaderPreferencesEntity) {

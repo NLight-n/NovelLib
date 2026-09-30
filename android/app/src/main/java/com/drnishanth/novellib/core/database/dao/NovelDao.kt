@@ -59,6 +59,22 @@ interface NovelDao {
     @Query("SELECT COUNT(*) FROM library_entries WHERE profile_id = :profileId AND novel_id = :novelId")
     suspend fun isNovelInLibrary(profileId: String, novelId: String): Int
 
+    @Query("SELECT * FROM library_entries WHERE profile_id = :profileId AND novel_id = :novelId LIMIT 1")
+    suspend fun getLibraryEntry(profileId: String, novelId: String): LibraryEntryEntity?
+
+    @Query("""
+        UPDATE library_entries 
+        SET download_mode = :mode, download_limit = :limit, auto_download_enabled = :autoDownload 
+        WHERE profile_id = :profileId AND novel_id = :novelId
+    """)
+    suspend fun updateDownloadPolicy(
+        profileId: String,
+        novelId: String,
+        mode: String,
+        limit: Int,
+        autoDownload: Boolean
+    )
+
     @Query("UPDATE library_entries SET last_opened_at = :timestamp WHERE profile_id = :profileId AND novel_id = :novelId")
     suspend fun updateLastOpened(profileId: String, novelId: String, timestamp: Long = System.currentTimeMillis())
 }

@@ -17,6 +17,10 @@ import com.drnishanth.novellib.scraping.engine.DefaultSourceDefinitions
 import com.drnishanth.novellib.scraping.engine.RollbackManager
 import com.drnishanth.novellib.scraping.engine.SourceDefinitionEngine
 import com.drnishanth.novellib.scraping.models.SourceDefinition
+import com.drnishanth.novellib.downloads.DownloadManager
+import com.drnishanth.novellib.downloads.StoragePolicyManager
+import com.drnishanth.novellib.downloads.models.RetentionPolicy
+import com.drnishanth.novellib.downloads.models.StoragePolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -32,7 +36,9 @@ class NovelRepository(
     private val readerPreferencesDao: ReaderPreferencesDao,
     private val sourceDefinitionDao: SourceDefinitionDao,
     private val scraperEngine: SourceDefinitionEngine = SourceDefinitionEngine(),
-    private val rollbackManager: RollbackManager? = null
+    private val rollbackManager: RollbackManager? = null,
+    val downloadManager: DownloadManager? = null,
+    val storagePolicyManager: StoragePolicyManager? = null
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -56,6 +62,43 @@ class NovelRepository(
         return readingProgressDao.getProgress(profileId, novelId)
     }
 
+    suspend fun getLibraryEntry(profileId: String, novelId: String): LibraryEntryEntity? {
+        return novelDao.getLibraryEntry(profileId, novelId)
+    }
+
+    suspend fun updateDownloadPolicy(
+        profileId: String,
+        novelId: String,
+        mode: String,
+        limit: Int,
+        autoDownload: Boolean
+    ) {
+        novelDao.updateDownloadPolicy(profileId, novelId, mode, limit, autoDownload)
+        if (autoDownload) {
+            syncNovelStoragePolicy(profileId, novelId)
+        }
+    }
+
+    suspend fun syncNovelStoragePolicy(profileId: String, novelId: String) {
+        val entry = novelDao.getLibraryEntry(profileId, novelId) ?: return
+        if (storagePolicyManager == null || downloadManager == null) return
+
+        val progress = readingProgressDao.getProgressDirect(profileId, novelId)
+        val lastReadNum = progress?.chapterId?.let { chapterDao.getChapterById(it)?.chapterNumber } ?: 0
+
+        val policy = StoragePolicy.fromString(entry.downloadMode)
+        val chaptersToDownload = storagePolicyManager.resolveChaptersToDownload(
+            novelId = novelId,
+            storagePolicy = policy,
+            limit = entry.downloadLimit,
+            lastReadChapterNumber = lastReadNum
+        )
+
+        if (chaptersToDownload.isNotEmpty()) {
+            downloadManager.enqueueChapters(chaptersToDownload.map { it.id }, RetentionPolicy.OFFLINE)
+        }
+    }
+
     suspend fun saveReadingProgress(
         profileId: String,
         novelId: String,
@@ -74,6 +117,23 @@ class NovelRepository(
             )
         )
         novelDao.updateLastOpened(profileId, novelId)
+
+        // Trigger automatic downloading of next chapters if configured
+        val entry = novelDao.getLibraryEntry(profileId, novelId)
+        if (entry != null && entry.autoDownloadEnabled && storagePolicyManager != null && downloadManager != null) {
+            val chapter = chapterDao.getChapterById(chapterId)
+            val currentChapterNum = chapter?.chapterNumber ?: 0
+            val policy = StoragePolicy.fromString(entry.downloadMode)
+            val toDownload = storagePolicyManager.resolveChaptersToDownload(
+                novelId = novelId,
+                storagePolicy = policy,
+                limit = entry.downloadLimit,
+                lastReadChapterNumber = currentChapterNum
+            )
+            if (toDownload.isNotEmpty()) {
+                downloadManager.enqueueChapters(toDownload.map { it.id }, RetentionPolicy.OFFLINE)
+            }
+        }
     }
 
     fun getReaderPreferences(profileId: String): Flow<ReaderPreferencesEntity?> {

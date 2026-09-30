@@ -4,6 +4,9 @@ import android.app.Application
 import com.drnishanth.novellib.core.database.NovelDatabase
 import com.drnishanth.novellib.data.repository.NovelRepository
 import com.drnishanth.novellib.data.repository.ProfileRepository
+import com.drnishanth.novellib.downloads.DownloadManager
+import com.drnishanth.novellib.downloads.RetentionPolicyEngine
+import com.drnishanth.novellib.downloads.StoragePolicyManager
 import com.drnishanth.novellib.scraping.engine.RollbackManager
 import com.drnishanth.novellib.scraping.registry.SourceDefinitionRepositoryClient
 
@@ -28,6 +31,23 @@ class NovelLibApplication : Application() {
         SourceDefinitionRepositoryClient(sourceDefinitionDao = database.sourceDefinitionDao())
     }
 
+    val downloadManager: DownloadManager by lazy {
+        DownloadManager(
+            context = this,
+            chapterDao = database.chapterDao(),
+            sourceDefinitionDao = database.sourceDefinitionDao(),
+            rollbackManager = rollbackManager
+        )
+    }
+
+    val storagePolicyManager: StoragePolicyManager by lazy {
+        StoragePolicyManager(chapterDao = database.chapterDao())
+    }
+
+    val retentionPolicyEngine: RetentionPolicyEngine by lazy {
+        RetentionPolicyEngine(chapterDao = database.chapterDao())
+    }
+
     val novelRepository: NovelRepository by lazy {
         NovelRepository(
             context = this,
@@ -36,7 +56,9 @@ class NovelLibApplication : Application() {
             readingProgressDao = database.readingProgressDao(),
             readerPreferencesDao = database.readerPreferencesDao(),
             sourceDefinitionDao = database.sourceDefinitionDao(),
-            rollbackManager = rollbackManager
+            rollbackManager = rollbackManager,
+            downloadManager = downloadManager,
+            storagePolicyManager = storagePolicyManager
         )
     }
 
