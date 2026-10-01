@@ -152,6 +152,11 @@ class ReaderViewModel(
                         position = savedPos,
                         progressPercent = percent
                     )
+                    novelRepository.markChapterRead(
+                        profileId = profileId,
+                        novelId = novelId,
+                        chapterId = chapterId
+                    )
                 }
             } else {
                 _uiState.value = _uiState.value.copy(

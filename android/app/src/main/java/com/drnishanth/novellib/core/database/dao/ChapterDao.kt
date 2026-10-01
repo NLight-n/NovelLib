@@ -31,6 +31,9 @@ interface ChapterDao {
     @Update
     suspend fun updateChapter(chapter: ChapterEntity)
 
+    @Update
+    suspend fun updateChapters(chapters: List<ChapterEntity>)
+
     @Query("""
         UPDATE chapters 
         SET download_state = :state, file_path = :filePath, content_hash = :contentHash, downloaded_at = :downloadedAt, updated_at = :updatedAt

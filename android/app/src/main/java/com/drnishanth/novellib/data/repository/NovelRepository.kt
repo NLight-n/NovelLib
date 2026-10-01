@@ -23,11 +23,14 @@ import com.drnishanth.novellib.downloads.StoragePolicyManager
 import com.drnishanth.novellib.downloads.models.RetentionPolicy
 import com.drnishanth.novellib.downloads.models.StoragePolicy
 import com.drnishanth.novellib.core.database.dao.NotificationDao
+import com.drnishanth.novellib.core.database.dao.ReadChapterDao
 import com.drnishanth.novellib.core.database.entities.NotificationEntity
+import com.drnishanth.novellib.core.database.entities.ReadChapterEntity
 import com.drnishanth.novellib.core.notifications.NovelNotificationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -41,6 +44,7 @@ class NovelRepository(
     private val readerPreferencesDao: ReaderPreferencesDao,
     private val sourceDefinitionDao: SourceDefinitionDao,
     private val notificationDao: NotificationDao? = null,
+    private val readChapterDao: ReadChapterDao? = null,
     private val scraperEngine: SourceDefinitionEngine = SourceDefinitionEngine(),
     private val rollbackManager: RollbackManager? = null,
     val downloadManager: DownloadManager? = null,
@@ -66,6 +70,26 @@ class NovelRepository(
 
     fun getReadingProgress(profileId: String, novelId: String): Flow<ReadingProgressEntity?> {
         return readingProgressDao.getProgress(profileId, novelId)
+    }
+
+    fun getReadChapterIds(profileId: String, novelId: String): Flow<List<String>> {
+        return readChapterDao?.getReadChapterIds(profileId, novelId) ?: flowOf(emptyList())
+    }
+
+    suspend fun markChapterRead(profileId: String, novelId: String, chapterId: String) {
+        readChapterDao?.markChapterRead(
+            ReadChapterEntity(
+                profileId = profileId,
+                novelId = novelId,
+                chapterId = chapterId,
+                isRead = true,
+                readAt = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun markChapterUnread(profileId: String, chapterId: String) {
+        readChapterDao?.markChapterUnread(profileId, chapterId)
     }
 
     suspend fun getLibraryEntry(profileId: String, novelId: String): LibraryEntryEntity? {
@@ -309,7 +333,9 @@ class NovelRepository(
         for (entity in customDefs) {
             try {
                 val parsed = json.decodeFromString<SourceDefinition>(entity.jsonContent)
-                if (scraperEngine.matches(url, parsed)) return parsed
+                val builtin = DefaultSourceDefinitions.BUILTIN_DEFINITIONS.firstOrNull { it.id == parsed.id }
+                val effective = if (builtin != null && builtin.version > parsed.version) builtin else parsed
+                if (scraperEngine.matches(url, effective)) return effective
             } catch (_: Exception) {}
         }
 
@@ -350,32 +376,43 @@ class NovelRepository(
 
             val allNewChapters = mutableListOf<ChapterEntity>()
             val existingChapters = chapterDao.getChaptersListForNovel(novelId)
-            val existingUrls = existingChapters.map { it.sourceUrl }.toSet()
-            val existingNumbers = existingChapters.map { it.chapterNumber }.toSet()
+            val existingByUrl = existingChapters.associateBy { it.sourceUrl }
 
             for (source in sources) {
                 val def = findMatchingDefinition(source.sourceUrl) ?: continue
                 val (_, scrapedChapters) = scraperEngine.scrapeNovel(source.sourceUrl, def)
 
-                val newScraped = scrapedChapters.filter {
-                    it.url !in existingUrls && it.number !in existingNumbers
-                }
+                val toInsert = mutableListOf<ChapterEntity>()
+                val toUpdate = mutableListOf<ChapterEntity>()
 
-                if (newScraped.isNotEmpty()) {
-                    val newEntities = newScraped.map { item ->
-                        ChapterEntity(
-                            id = UUID.randomUUID().toString(),
-                            novelId = novelId,
-                            sourceId = source.id,
-                            chapterNumber = item.number,
-                            title = item.title,
-                            sourceUrl = item.url,
-                            publishedAt = item.publishedAt,
-                            discoveredAt = System.currentTimeMillis()
+                for (scraped in scrapedChapters) {
+                    val existing = existingByUrl[scraped.url]
+                    if (existing != null) {
+                        if (existing.chapterNumber != scraped.number || existing.title != scraped.title) {
+                            toUpdate.add(existing.copy(chapterNumber = scraped.number, title = scraped.title))
+                        }
+                    } else {
+                        toInsert.add(
+                            ChapterEntity(
+                                id = UUID.randomUUID().toString(),
+                                novelId = novelId,
+                                sourceId = source.id,
+                                chapterNumber = scraped.number,
+                                title = scraped.title,
+                                sourceUrl = scraped.url,
+                                publishedAt = scraped.publishedAt,
+                                discoveredAt = System.currentTimeMillis()
+                            )
                         )
                     }
-                    chapterDao.insertChapters(newEntities)
-                    allNewChapters.addAll(newEntities)
+                }
+
+                if (toUpdate.isNotEmpty()) {
+                    chapterDao.updateChapters(toUpdate)
+                }
+                if (toInsert.isNotEmpty()) {
+                    chapterDao.insertChapters(toInsert)
+                    allNewChapters.addAll(toInsert)
                 }
 
                 novelDao.updateSourceCheckTime(

@@ -17,7 +17,9 @@ import com.drnishanth.novellib.core.database.dao.UserProfileDao
 import com.drnishanth.novellib.core.database.entities.ChapterEntity
 import com.drnishanth.novellib.core.database.entities.LibraryEntryEntity
 import com.drnishanth.novellib.core.database.entities.NotificationEntity
+import com.drnishanth.novellib.core.database.dao.ReadChapterDao
 import com.drnishanth.novellib.core.database.entities.NovelEntity
+import com.drnishanth.novellib.core.database.entities.ReadChapterEntity
 import com.drnishanth.novellib.core.database.entities.ReaderPreferencesEntity
 import com.drnishanth.novellib.core.database.entities.ReadingProgressEntity
 import com.drnishanth.novellib.core.database.entities.SourceDefinitionEntity
@@ -36,9 +38,10 @@ import com.drnishanth.novellib.core.database.entities.UserProfileEntity
         ReaderPreferencesEntity::class,
         NotificationEntity::class,
         SourceDefinitionEntity::class,
-        SyncDeviceEntity::class
+        SyncDeviceEntity::class,
+        ReadChapterEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class NovelDatabase : RoomDatabase() {
@@ -50,6 +53,7 @@ abstract class NovelDatabase : RoomDatabase() {
     abstract fun sourceDefinitionDao(): SourceDefinitionDao
     abstract fun notificationDao(): NotificationDao
     abstract fun syncDeviceDao(): SyncDeviceDao
+    abstract fun readChapterDao(): ReadChapterDao
 
     companion object {
         @Volatile
@@ -61,6 +65,27 @@ abstract class NovelDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `read_chapters` (
+                        `profile_id` TEXT NOT NULL,
+                        `novel_id` TEXT NOT NULL,
+                        `chapter_id` TEXT NOT NULL,
+                        `is_read` INTEGER NOT NULL DEFAULT 1,
+                        `read_at` INTEGER NOT NULL,
+                        PRIMARY KEY(`profile_id`, `chapter_id`),
+                        FOREIGN KEY(`profile_id`) REFERENCES `user_profiles`(`id`) ON DELETE CASCADE,
+                        FOREIGN KEY(`novel_id`) REFERENCES `novels`(`id`) ON DELETE CASCADE,
+                        FOREIGN KEY(`chapter_id`) REFERENCES `chapters`(`id`) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_read_chapters_profile_id_novel_id` ON `read_chapters` (`profile_id`, `novel_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_read_chapters_novel_id` ON `read_chapters` (`novel_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_read_chapters_chapter_id` ON `read_chapters` (`chapter_id`)")
+            }
+        }
+
         fun getInstance(context: Context): NovelDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -68,7 +93,7 @@ abstract class NovelDatabase : RoomDatabase() {
                     NovelDatabase::class.java,
                     "novellib.db"
                 )
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

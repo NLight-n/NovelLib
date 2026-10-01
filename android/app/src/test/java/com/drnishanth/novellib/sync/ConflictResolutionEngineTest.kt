@@ -264,6 +264,7 @@ class FakeChapterDao : ChapterDao {
     override suspend fun insertChapters(chapters: List<ChapterEntity>) { chapters.forEach { this.chapters[it.id] = it } }
     override suspend fun insertChapter(chapter: ChapterEntity) { chapters[chapter.id] = chapter }
     override suspend fun updateChapter(chapter: ChapterEntity) { chapters[chapter.id] = chapter }
+    override suspend fun updateChapters(chapters: List<ChapterEntity>) { chapters.forEach { this.chapters[it.id] = it } }
     override suspend fun updateDownloadState(chapterId: String, state: String, filePath: String?, contentHash: String?, downloadedAt: Long?, updatedAt: Long) {}
     override suspend fun updateRetentionPolicy(chapterId: String, policy: String) {}
     override suspend fun getQueuedChapters(): List<ChapterEntity> = emptyList()

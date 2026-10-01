@@ -45,12 +45,12 @@ class SourcesViewModel(
     private var cachedRemoteIndex: SourceRegistryIndex? = null
 
     init {
-        // Seed built-in definitions into Room if database is empty
+        // Seed or auto-upgrade built-in definitions into Room
         viewModelScope.launch {
-            val count = sourceDefinitionDao.getAllDefinitionsDirect().size
-            if (count == 0) {
-                val json = Json { prettyPrint = true }
-                for (builtin in DefaultSourceDefinitions.BUILTIN_DEFINITIONS) {
+            val json = Json { prettyPrint = true }
+            for (builtin in DefaultSourceDefinitions.BUILTIN_DEFINITIONS) {
+                val existing = sourceDefinitionDao.getDefinitionById(builtin.id)
+                if (existing == null) {
                     val rawJson = json.encodeToString(builtin)
                     sourceDefinitionDao.insertDefinition(
                         SourceDefinitionEntity(
@@ -62,6 +62,20 @@ class SourcesViewModel(
                             minimumEngineVersion = builtin.minimumEngineVersion,
                             jsonContent = rawJson,
                             installedAt = System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                } else if (builtin.version > existing.version) {
+                    val rawJson = json.encodeToString(builtin)
+                    sourceDefinitionDao.insertDefinition(
+                        existing.copy(
+                            version = builtin.version,
+                            name = builtin.name,
+                            description = builtin.description,
+                            minimumEngineVersion = builtin.minimumEngineVersion,
+                            jsonContent = rawJson,
+                            previousVersion = existing.version,
+                            previousJsonContent = existing.jsonContent,
                             updatedAt = System.currentTimeMillis()
                         )
                     )
@@ -106,12 +120,17 @@ class SourcesViewModel(
             _uiState.value = _uiState.value.copy(isUpdatingSourceId = sourceId, errorMessage = null)
             val result = repositoryClient.installOrUpdate(remoteItem, _uiState.value.registryUrl)
             if (result.isSuccess) {
+                val successMsg = "Successfully updated ${remoteItem.name} to v${remoteItem.version}!"
+                val checkResult = repositoryClient.checkForUpdates(_uiState.value.registryUrl)
+                val statuses = checkResult.getOrNull() ?: emptyList()
+                val fetchIndexResult = repositoryClient.fetchRegistryIndex(_uiState.value.registryUrl)
+                cachedRemoteIndex = fetchIndexResult.getOrNull()
+
                 _uiState.value = _uiState.value.copy(
                     isUpdatingSourceId = null,
-                    message = "Successfully updated ${remoteItem.name} to v${remoteItem.version}!"
+                    updateStatuses = statuses,
+                    message = successMsg
                 )
-                // Refresh status
-                checkForUpdates()
             } else {
                 _uiState.value = _uiState.value.copy(
                     isUpdatingSourceId = null,

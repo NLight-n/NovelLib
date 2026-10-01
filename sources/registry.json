@@ -27,7 +27,7 @@
       "description": "NovGo online free web novels and light fiction",
       "minimum_engine_version": 1,
       "relative_path": "definitions/novgo.json",
-      "checksum": "sha256:e5ac4a24b59f2acd3c7ed17d4e0f802ca4f09edf741d41cd6a8f648043399f09"
+      "checksum": "sha256:1ccbc6ef5e5e0afd129df81e33adf4b6048c82b4b3313cd14c5915d445bc1ad1"
     }
   ]
 }

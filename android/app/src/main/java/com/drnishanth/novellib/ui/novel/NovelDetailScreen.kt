@@ -1,9 +1,11 @@
 package com.drnishanth.novellib.ui.novel
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,8 +16,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
@@ -23,6 +30,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Refresh
@@ -40,6 +48,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,10 +63,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,6 +78,7 @@ import com.drnishanth.novellib.core.database.entities.ChapterEntity
 import com.drnishanth.novellib.core.utils.HtmlSanitizer
 import com.drnishanth.novellib.downloads.models.ChapterDownloadStatus
 import com.drnishanth.novellib.downloads.models.DownloadState
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,11 +90,38 @@ fun NovelDetailScreen(
     val novel by viewModel.novel.collectAsState()
     val chapters by viewModel.chapters.collectAsState()
     val progress by viewModel.readingProgress.collectAsState()
+    val readChapterIds by viewModel.readChapterIds.collectAsState()
+    val isAscending by viewModel.isAscending.collectAsState()
     val libraryEntry by viewModel.libraryEntry.collectAsState()
     val downloadStatuses by viewModel.downloadStatuses.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+
     var showRemoveConfirmDialog by remember { mutableStateOf(false) }
+    var showJumpDialog by remember { mutableStateOf(false) }
+    var jumpInputText by remember { mutableStateOf("") }
+
+    val sortedChapters = remember(chapters, isAscending) {
+        if (isAscending) chapters else chapters.reversed()
+    }
+
+    val currentProgressChapter = remember(chapters, progress) {
+        chapters.firstOrNull { it.id == progress?.chapterId }
+    }
+    val currentProgressNumber = currentProgressChapter?.chapterNumber
+
+    fun isChapterRead(chapter: ChapterEntity): Boolean {
+        if (chapter.id in readChapterIds) return true
+        if (currentProgressNumber != null && chapter.chapterNumber < currentProgressNumber) return true
+        if (chapter.id == progress?.chapterId && (progress?.progressPercent ?: 0f) >= 0.9f) return true
+        return false
+    }
+
+    val readCount = remember(chapters, readChapterIds, currentProgressNumber, progress) {
+        chapters.count { isChapterRead(it) }
+    }
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let {
@@ -147,6 +188,7 @@ fun NovelDetailScreen(
                 .padding(padding)
         ) {
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp)
@@ -246,25 +288,93 @@ fun NovelDetailScreen(
                             }
 
                             val downloadedCount = chapters.count { it.downloadState == "available" }
-                            Text(
-                                text = "Chapters (${chapters.size})  •  $downloadedCount downloaded",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Chapters (${chapters.size})",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFF2ECC71))
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "$readCount read  •  $downloadedCount downloaded",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFF39C12))
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "${chapters.size - readCount} unread",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    OutlinedButton(
+                                        onClick = {
+                                            jumpInputText = ""
+                                            showJumpDialog = true
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier.padding(end = 6.dp)
+                                    ) {
+                                        Icon(Icons.Default.Navigation, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Jump #", fontSize = 11.sp)
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { viewModel.toggleSortOrder() },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(
+                                            if (isAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                                            contentDescription = "Toggle Sort Order",
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (isAscending) "1 → N" else "N → 1", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
                         }
                     }
                 }
 
-                items(chapters) { chapter ->
+                items(sortedChapters) { chapter ->
                     val status = downloadStatuses[chapter.id]
+                    val chapterRead = isChapterRead(chapter)
                     ChapterRowWithDownload(
                         chapter = chapter,
                         liveStatus = status,
                         isCurrentProgress = chapter.id == progress?.chapterId,
+                        isRead = chapterRead,
                         onOpen = { onOpenChapter(chapter.id) },
                         onDownload = { viewModel.downloadChapter(chapter.id) },
-                        onDelete = { viewModel.deleteChapterDownload(chapter.id) }
+                        onDelete = { viewModel.deleteChapterDownload(chapter.id) },
+                        onToggleRead = { viewModel.toggleChapterRead(chapter.id, chapterRead) }
                     )
                 }
             }
@@ -326,6 +436,56 @@ fun NovelDetailScreen(
                     }
                 )
             }
+
+            // Jump to Chapter Number Dialog
+            if (showJumpDialog) {
+                AlertDialog(
+                    onDismissRequest = { showJumpDialog = false },
+                    title = { Text("Jump to Chapter") },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Enter chapter number (1 to ${chapters.size}):",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = jumpInputText,
+                                onValueChange = { jumpInputText = it.filter { ch -> ch.isDigit() } },
+                                label = { Text("Chapter Number") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val targetNum = jumpInputText.toIntOrNull()
+                                if (targetNum != null && sortedChapters.isNotEmpty()) {
+                                    val targetIndex = sortedChapters.indexOfFirst {
+                                        if (isAscending) it.chapterNumber >= targetNum else it.chapterNumber <= targetNum
+                                    }.takeIf { it >= 0 } ?: (sortedChapters.size - 1)
+                                    coroutineScope.launch {
+                                        // item 0 is the novel header card, chapter items start at item 1
+                                        listState.animateScrollToItem(1 + targetIndex)
+                                    }
+                                    showJumpDialog = false
+                                    jumpInputText = ""
+                                }
+                            }
+                        ) {
+                            Text("Jump")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showJumpDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -335,16 +495,18 @@ fun ChapterRowWithDownload(
     chapter: ChapterEntity,
     liveStatus: ChapterDownloadStatus?,
     isCurrentProgress: Boolean,
+    isRead: Boolean,
     onOpen: () -> Unit,
     onDownload: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onToggleRead: () -> Unit = {}
 ) {
     val currentState = liveStatus?.state?.value ?: chapter.downloadState
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 3.dp)
             .clickable(onClick = onOpen),
         colors = CardDefaults.cardColors(
             containerColor = if (isCurrentProgress) {
@@ -360,6 +522,17 @@ fun ChapterRowWithDownload(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Read/Unread Visual Indicator Dot: Green (#2ECC71) for Read, Yellow/Orange (#F39C12) for Unread
+            Box(
+                modifier = Modifier
+                    .size(9.dp)
+                    .clip(CircleShape)
+                    .background(if (isRead) Color(0xFF2ECC71) else Color(0xFFF39C12))
+                    .clickable(onClick = onToggleRead)
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
             Text(
                 text = "${chapter.chapterNumber}.",
                 style = MaterialTheme.typography.bodyMedium,

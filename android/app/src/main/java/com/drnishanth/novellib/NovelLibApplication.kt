@@ -57,6 +57,7 @@ class NovelLibApplication : Application() {
             readerPreferencesDao = database.readerPreferencesDao(),
             sourceDefinitionDao = database.sourceDefinitionDao(),
             notificationDao = database.notificationDao(),
+            readChapterDao = database.readChapterDao(),
             rollbackManager = rollbackManager,
             downloadManager = downloadManager,
             storagePolicyManager = storagePolicyManager

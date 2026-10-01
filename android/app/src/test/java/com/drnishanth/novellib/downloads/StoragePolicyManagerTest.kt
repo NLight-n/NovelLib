@@ -108,6 +108,8 @@ class FakeChapterDao : ChapterDao {
 
     override suspend fun updateChapter(chapter: ChapterEntity) {}
 
+    override suspend fun updateChapters(chapters: List<ChapterEntity>) {}
+
     override suspend fun updateDownloadState(
         chapterId: String,
         state: String,

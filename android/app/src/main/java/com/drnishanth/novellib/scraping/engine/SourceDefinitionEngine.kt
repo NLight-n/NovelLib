@@ -113,8 +113,9 @@ class SourceDefinitionEngine(
         definition.chapters.pagination?.let { pagRule ->
             try {
                 val pageOptions = doc.select(pagRule.selector)
+                val directRule = pagRule.copy(selector = ".")
                 val pageUrls = pageOptions.mapNotNull { opt ->
-                    val rawPageUrl = extractFromElement(opt, pagRule, url)
+                    val rawPageUrl = extractFromElement(opt, directRule, url)
                     if (rawPageUrl != null &&
                         (rawPageUrl.startsWith("http://") || rawPageUrl.startsWith("https://")) &&
                         rawPageUrl != url

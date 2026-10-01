@@ -174,7 +174,7 @@ object DefaultSourceDefinitions {
 
     val NOVGO = SourceDefinition(
         id = "novgo",
-        version = 1,
+        version = 2,
         name = "NovGo",
         description = "NovGo online free web novels and light fiction",
         minimumEngineVersion = 1,

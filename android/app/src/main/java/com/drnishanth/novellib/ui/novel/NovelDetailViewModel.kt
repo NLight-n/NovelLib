@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -46,6 +47,9 @@ class NovelDetailViewModel(
     private val _uiState = MutableStateFlow(NovelDetailUiState())
     val uiState: StateFlow<NovelDetailUiState> = _uiState.asStateFlow()
 
+    private val _isAscending = MutableStateFlow(true)
+    val isAscending: StateFlow<Boolean> = _isAscending.asStateFlow()
+
     val chapters: StateFlow<List<ChapterEntity>> = novelRepository.getChapters(novelId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -57,7 +61,30 @@ class NovelDetailViewModel(
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
+    val readChapterIds: StateFlow<Set<String>> = profileRepository.activeProfile.flatMapLatest { profile ->
+        if (profile != null) {
+            novelRepository.getReadChapterIds(profile.id, novelId).map { it.toSet() }
+        } else {
+            flowOf(emptySet())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+
     val downloadStatuses: StateFlow<Map<String, ChapterDownloadStatus>> = downloadManager.downloadStatuses
+
+    fun toggleSortOrder() {
+        _isAscending.value = !_isAscending.value
+    }
+
+    fun toggleChapterRead(chapterId: String, currentRead: Boolean) {
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        viewModelScope.launch {
+            if (currentRead) {
+                novelRepository.markChapterUnread(profileId, chapterId)
+            } else {
+                novelRepository.markChapterRead(profileId, novelId, chapterId)
+            }
+        }
+    }
 
     init {
         viewModelScope.launch {
