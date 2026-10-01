@@ -92,6 +92,13 @@ class LibraryViewModel(
         }
     }
 
+    fun removeNovelFromLibrary(novelId: String, deleteDownloads: Boolean = false) {
+        val profile = activeProfile.value ?: return
+        viewModelScope.launch {
+            novelRepository.removeFromLibrary(profile.id, novelId, deleteDownloads)
+        }
+    }
+
     fun switchProfile() {
         profileRepository.logout()
     }

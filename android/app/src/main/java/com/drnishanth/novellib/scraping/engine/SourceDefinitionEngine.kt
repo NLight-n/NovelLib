@@ -1,5 +1,6 @@
 package com.drnishanth.novellib.scraping.engine
 
+import com.drnishanth.novellib.core.utils.HtmlSanitizer
 import com.drnishanth.novellib.scraping.models.ChapterRule
 import com.drnishanth.novellib.scraping.models.RequestConfig
 import com.drnishanth.novellib.scraping.models.ScrapedChapterContent
@@ -62,46 +63,107 @@ class SourceDefinitionEngine(
         val doc = fetchDocument(url, definition.requests["default"])
 
         // Extract Novel metadata
-        val title = extractValue(doc, definition.novel.title, url)
+        val rawTitle = extractValue(doc, definition.novel.title, url)
             ?: throw IllegalStateException("Novel title could not be extracted from $url")
-        val author = definition.novel.author?.let { extractValue(doc, it, url) } ?: "Unknown"
-        val description = definition.novel.description?.let { extractValue(doc, it, url) } ?: ""
+        val rawAuthor = definition.novel.author?.let { extractValue(doc, it, url) } ?: "Unknown"
+        val rawDescription = definition.novel.description?.let { extractValue(doc, it, url) } ?: ""
         val coverUrl = definition.novel.cover?.let { extractValue(doc, it, url) }
         val status = definition.novel.status?.let { extractValue(doc, it, url) } ?: "ONGOING"
 
         val novel = ScrapedNovel(
-            title = title,
-            author = author,
-            description = description,
+            title = HtmlSanitizer.cleanTitle(rawTitle),
+            author = HtmlSanitizer.cleanTitle(rawAuthor),
+            description = HtmlSanitizer.cleanHtmlSynopsis(rawDescription),
             coverUrl = coverUrl,
             status = status,
             sourceUrl = url
         )
 
         // Extract Chapters
-        val chapterElements = doc.select(definition.chapters.container)
         val chapters = mutableListOf<ScrapedChapterItem>()
 
-        chapterElements.forEachIndexed { index, element ->
-            val chapTitle = extractFromElement(element, definition.chapters.title, url) ?: "Chapter ${index + 1}"
-            val chapUrl = extractFromElement(element, definition.chapters.url, url)
+        fun extractChaptersFromDoc(d: Document, pageBaseUrl: String) {
+            val elements = d.select(definition.chapters.container)
+            elements.forEach { element ->
+                val rawChapTitle = extractFromElement(element, definition.chapters.title, pageBaseUrl)
+                    ?: "Chapter ${chapters.size + 1}"
+                val chapTitle = HtmlSanitizer.cleanTitle(rawChapTitle)
+                val chapUrl = extractFromElement(element, definition.chapters.url, pageBaseUrl)
 
-            if (!chapUrl.isNullOrBlank()) {
-                val pubAt = definition.chapters.publishedAt?.let {
-                    extractFromElement(element, it, url)?.toLongOrNull()
-                }
-                chapters.add(
-                    ScrapedChapterItem(
-                        number = index + 1,
-                        title = chapTitle,
-                        url = chapUrl,
-                        publishedAt = pubAt
+                if (!chapUrl.isNullOrBlank()) {
+                    val pubAt = definition.chapters.publishedAt?.let {
+                        extractFromElement(element, it, pageBaseUrl)?.toLongOrNull()
+                    }
+                    val parsedNumber = parseChapterNumber(chapTitle, chapUrl) ?: (chapters.size + 1)
+                    chapters.add(
+                        ScrapedChapterItem(
+                            number = parsedNumber,
+                            title = chapTitle,
+                            url = chapUrl,
+                            publishedAt = pubAt
+                        )
                     )
-                )
+                }
             }
         }
 
-        Pair(novel, chapters)
+        extractChaptersFromDoc(doc, url)
+
+        // If pagination rule exists, extract additional pages
+        definition.chapters.pagination?.let { pagRule ->
+            try {
+                val pageOptions = doc.select(pagRule.selector)
+                val pageUrls = pageOptions.mapNotNull { opt ->
+                    val rawPageUrl = extractFromElement(opt, pagRule, url)
+                    if (rawPageUrl != null &&
+                        (rawPageUrl.startsWith("http://") || rawPageUrl.startsWith("https://")) &&
+                        rawPageUrl != url
+                    ) {
+                        rawPageUrl
+                    } else null
+                }.distinct()
+
+                for (pageUrl in pageUrls) {
+                    try {
+                        val pageDoc = fetchDocument(pageUrl, definition.requests["default"])
+                        extractChaptersFromDoc(pageDoc, pageUrl)
+                    } catch (e: Exception) {
+                        // Skip page on failure
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore pagination errors
+            }
+        }
+
+        // De-duplicate by chapter URL and sort if numbers are valid
+        val distinctChapters = chapters.distinctBy { it.url }
+        val finalChapters = if (distinctChapters.size > 1 && distinctChapters.all { it.number > 0 }) {
+            val numbers = distinctChapters.map { it.number }
+            if (numbers.distinct().size == distinctChapters.size) {
+                distinctChapters.sortedBy { it.number }
+            } else {
+                distinctChapters.mapIndexed { idx, item -> item.copy(number = idx + 1) }
+            }
+        } else {
+            distinctChapters.mapIndexed { idx, item -> item.copy(number = idx + 1) }
+        }
+
+        Pair(novel, finalChapters)
+    }
+
+    private fun parseChapterNumber(title: String, url: String): Int? {
+        val titleRegex = Regex("""(?i)\b(?:chapter|ch\.?)\s*(\d+)""")
+        val titleMatch = titleRegex.find(title)
+        if (titleMatch != null) {
+            return titleMatch.groupValues[1].toIntOrNull()
+        }
+        val urlRegex = Regex("""(?i)\bchapter-(\d+)\b""")
+        val urlMatch = urlRegex.find(url)
+        if (urlMatch != null) {
+            return urlMatch.groupValues[1].toIntOrNull()
+        }
+        return null
     }
 
     /**

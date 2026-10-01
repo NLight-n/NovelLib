@@ -52,5 +52,8 @@ data class ReaderPreferencesEntity(
     val einkFullRefreshInterval: Int = 10, // 0 = disabled, 1, 5, 10, 20 pages
 
     @ColumnInfo(name = "volume_keys_navigation")
-    val volumeKeysNavigation: Boolean = true // Navigate pages via physical volume/e-reader buttons
+    val volumeKeysNavigation: Boolean = true, // Navigate pages via physical volume/e-reader buttons
+
+    @ColumnInfo(name = "text_brightness")
+    val textBrightness: Float = 0.85f // 0.4f (soft light grey) to 1.0f (pure white) in dark mode
 )

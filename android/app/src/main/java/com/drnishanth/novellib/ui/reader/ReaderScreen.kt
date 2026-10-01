@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.BrightnessHigh
+import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
@@ -39,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -131,6 +134,14 @@ fun ReaderScreen(
     }
 
     NovelLibTheme(themeName = prefs.theme) {
+        val isDark = prefs.theme.equals("dark", ignoreCase = true)
+        val readerTextColor = if (isDark) {
+            val b = prefs.textBrightness.coerceIn(0.40f, 1.0f)
+            Color(red = b, green = b, blue = b)
+        } else {
+            MaterialTheme.colorScheme.onBackground
+        }
+
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
@@ -216,6 +227,7 @@ fun ReaderScreen(
                         isEInkDevice = uiState.isEInkDevice,
                         onThemeChanged = { viewModel.updateTheme(it) },
                         onFontSizeChanged = { viewModel.updateFontSize(it) },
+                        onTextBrightnessChanged = { viewModel.updateTextBrightness(it) },
                         onManualRefresh = { viewModel.triggerScreenRefresh(context, view) }
                     )
                 }
@@ -264,6 +276,7 @@ fun ReaderScreen(
                         PaginatedReaderView(
                             uiState = uiState,
                             selectedFontFamily = selectedFontFamily,
+                            textColor = readerTextColor,
                             onPrevious = { viewModel.previousPage() },
                             onNext = { viewModel.nextPage() },
                             onToggleControls = { viewModel.toggleControls() }
@@ -289,7 +302,7 @@ fun ReaderScreen(
                                         fontSize = (prefs.fontSize + 4).sp,
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = selectedFontFamily,
-                                        color = MaterialTheme.colorScheme.onBackground,
+                                        color = readerTextColor,
                                         modifier = Modifier.padding(bottom = 20.dp, top = 8.dp)
                                     )
                                 }
@@ -301,7 +314,7 @@ fun ReaderScreen(
                                     fontSize = prefs.fontSize.sp,
                                     lineHeight = (prefs.fontSize * prefs.lineHeight).sp,
                                     fontFamily = selectedFontFamily,
-                                    color = MaterialTheme.colorScheme.onBackground,
+                                    color = readerTextColor,
                                     modifier = Modifier.padding(bottom = prefs.paragraphSpacing.dp)
                                 )
                             }
@@ -363,7 +376,8 @@ fun ReaderScreen(
                         onLineHeightSelected = { viewModel.updateLineHeight(it) },
                         onNavigationModeSelected = { viewModel.updateNavigationMode(it) },
                         onRefreshIntervalSelected = { viewModel.updateRefreshInterval(it) },
-                        onVolumeKeysToggle = { viewModel.updateVolumeKeysNavigation(it) }
+                        onVolumeKeysToggle = { viewModel.updateVolumeKeysNavigation(it) },
+                        onTextBrightnessSelected = { viewModel.updateTextBrightness(it) }
                     )
                 }
             }
@@ -379,6 +393,7 @@ fun ReaderScreen(
 fun PaginatedReaderView(
     uiState: ReaderUiState,
     selectedFontFamily: FontFamily,
+    textColor: Color = MaterialTheme.colorScheme.onBackground,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onToggleControls: () -> Unit
@@ -407,7 +422,7 @@ fun PaginatedReaderView(
                     text = uiState.currentChapter?.title ?: "",
                     fontSize = 11.sp,
                     maxLines = 1,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = textColor.copy(alpha = 0.7f),
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 if (currentPage != null) {
@@ -415,7 +430,7 @@ fun PaginatedReaderView(
                         text = "${currentPage.displayPageNumber} / ${currentPage.totalPages}",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        color = textColor.copy(alpha = 0.7f)
                     )
                 }
             }
@@ -433,7 +448,7 @@ fun PaginatedReaderView(
                             fontSize = prefs.fontSize.sp,
                             lineHeight = (prefs.fontSize * prefs.lineHeight).sp,
                             fontFamily = selectedFontFamily,
-                            color = MaterialTheme.colorScheme.onBackground,
+                            color = textColor,
                             modifier = Modifier.padding(bottom = prefs.paragraphSpacing.dp)
                         )
                     }
@@ -509,6 +524,7 @@ fun ReaderControlsBottomBar(
     isEInkDevice: Boolean,
     onThemeChanged: (String) -> Unit,
     onFontSizeChanged: (Float) -> Unit,
+    onTextBrightnessChanged: (Float) -> Unit = {},
     onManualRefresh: () -> Unit
 ) {
     val isEInk = preferences.theme.equals("eink", ignoreCase = true)
@@ -599,6 +615,42 @@ fun ReaderControlsBottomBar(
                     )
                 }
             }
+
+            // Dark Mode Text Brightness Slider
+            if (preferences.theme.equals("dark", ignoreCase = true)) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.BrightnessLow,
+                        contentDescription = "Dim text",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Text Color",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Slider(
+                        value = preferences.textBrightness,
+                        onValueChange = onTextBrightnessChanged,
+                        valueRange = 0.40f..1.0f,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.BrightnessHigh,
+                        contentDescription = "Bright text",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -614,7 +666,8 @@ fun ReaderSettingsBottomSheet(
     onLineHeightSelected: (Float) -> Unit,
     onNavigationModeSelected: (String) -> Unit,
     onRefreshIntervalSelected: (Int) -> Unit,
-    onVolumeKeysToggle: (Boolean) -> Unit
+    onVolumeKeysToggle: (Boolean) -> Unit,
+    onTextBrightnessSelected: (Float) -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState()
 
@@ -632,6 +685,41 @@ fun ReaderSettingsBottomSheet(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
+
+            // Dark Mode Text Brightness Slider
+            if (preferences.theme.equals("dark", ignoreCase = true)) {
+                Spacer(modifier = Modifier.height(14.dp))
+                Text("Dark Mode Text Brightness", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Adjust text from soft light grey to pure white to reduce eye strain",
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.BrightnessLow,
+                        contentDescription = "Dim text",
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Slider(
+                        value = preferences.textBrightness,
+                        onValueChange = onTextBrightnessSelected,
+                        valueRange = 0.40f..1.0f,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(
+                        Icons.Default.BrightnessHigh,
+                        contentDescription = "Bright text",
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
 
             // E-Ink Device Diagnostics Badge
             if (isEInkDevice) {

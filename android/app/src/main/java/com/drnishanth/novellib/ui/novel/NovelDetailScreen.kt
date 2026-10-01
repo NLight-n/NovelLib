@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Notifications
@@ -31,6 +32,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -60,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.drnishanth.novellib.core.database.entities.ChapterEntity
+import com.drnishanth.novellib.core.utils.HtmlSanitizer
 import com.drnishanth.novellib.downloads.models.ChapterDownloadStatus
 import com.drnishanth.novellib.downloads.models.DownloadState
 
@@ -77,6 +80,7 @@ fun NovelDetailScreen(
     val downloadStatuses by viewModel.downloadStatuses.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showRemoveConfirmDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.message) {
         uiState.message?.let {
@@ -88,7 +92,13 @@ fun NovelDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(novel?.title ?: "Novel") },
+                title = {
+                    Text(
+                        text = novel?.title ?: "Novel",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -118,6 +128,13 @@ fun NovelDetailScreen(
                     }
                     IconButton(onClick = { viewModel.showStoragePolicyDialog() }) {
                         Icon(Icons.Default.Tune, contentDescription = "Storage Policy")
+                    }
+                    IconButton(onClick = { showRemoveConfirmDialog = true }) {
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "Remove from Library",
+                            tint = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             )
@@ -217,8 +234,11 @@ fun NovelDetailScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
+                                val cleanSynopsis = remember(n.description) {
+                                    HtmlSanitizer.cleanHtmlSynopsis(n.description)
+                                }
                                 Text(
-                                    text = n.description,
+                                    text = cleanSynopsis,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                                 )
@@ -258,6 +278,51 @@ fun NovelDetailScreen(
                     onDismiss = { viewModel.dismissStoragePolicyDialog() },
                     onSave = { mode, limit, autoDownload ->
                         viewModel.updateStoragePolicy(mode, limit, autoDownload)
+                    }
+                )
+            }
+
+            // Remove from Library Confirmation Dialog
+            if (showRemoveConfirmDialog) {
+                var alsoDeleteDownloads by remember { mutableStateOf(false) }
+                AlertDialog(
+                    onDismissRequest = { showRemoveConfirmDialog = false },
+                    title = { Text("Remove from Library") },
+                    text = {
+                        Column {
+                            Text("Are you sure you want to remove \"${novel?.title ?: "this novel"}\" from your library?")
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { alsoDeleteDownloads = !alsoDeleteDownloads }
+                            ) {
+                                Checkbox(
+                                    checked = alsoDeleteDownloads,
+                                    onCheckedChange = { alsoDeleteDownloads = it }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Also delete downloaded chapters", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showRemoveConfirmDialog = false
+                                viewModel.removeNovelFromLibrary(deleteDownloads = alsoDeleteDownloads) {
+                                    onBack()
+                                }
+                            }
+                        ) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRemoveConfirmDialog = false }) {
+                            Text("Cancel")
+                        }
                     }
                 )
             }

@@ -2,6 +2,7 @@
     <style name="Theme.NovelLib" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 
     <style name="Theme.NovelLib.Dialog" parent="android:Theme.Material.Light.Dialog.NoActionBar">

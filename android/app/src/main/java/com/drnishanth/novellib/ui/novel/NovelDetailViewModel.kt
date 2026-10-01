@@ -157,6 +157,17 @@ class NovelDetailViewModel(
         }
     }
 
+    fun removeNovelFromLibrary(deleteDownloads: Boolean = false, onRemoved: () -> Unit) {
+        val profileId = profileRepository.activeProfile.value?.id ?: return
+        viewModelScope.launch {
+            if (deleteDownloads) {
+                downloadManager.deleteDownloadedNovel(novelId)
+            }
+            novelRepository.removeFromLibrary(profileId, novelId, deleteDownloads)
+            onRemoved()
+        }
+    }
+
     fun clearMessage() {
         _uiState.value = _uiState.value.copy(message = null)
     }

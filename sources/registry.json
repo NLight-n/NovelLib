@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "updated_at": 1727709000000,
+  "version": 4,
+  "updated_at": 1727712000000,
   "sources": [
     {
       "id": "royalroad",
@@ -22,12 +22,12 @@
     },
     {
       "id": "novgo",
-      "version": 1,
+      "version": 2,
       "name": "NovGo",
       "description": "NovGo online free web novels and light fiction",
       "minimum_engine_version": 1,
       "relative_path": "definitions/novgo.json",
-      "checksum": "sha256:df6968819d3da9cdada0ae4166804aa69aa04af30c6bae85b9cf8b40b3329592"
+      "checksum": "sha256:e5ac4a24b59f2acd3c7ed17d4e0f802ca4f09edf741d41cd6a8f648043399f09"
     }
   ]
 }

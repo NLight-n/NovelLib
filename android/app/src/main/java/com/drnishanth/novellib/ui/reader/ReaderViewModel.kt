@@ -346,6 +346,12 @@ class ReaderViewModel(
         savePrefs(updated)
     }
 
+    fun updateTextBrightness(brightness: Float) {
+        val updated = _uiState.value.preferences.copy(textBrightness = brightness)
+        _uiState.value = _uiState.value.copy(preferences = updated)
+        savePrefs(updated)
+    }
+
     fun downloadCurrentChapter() {
         val chapter = _uiState.value.currentChapter ?: return
         downloadManager.enqueueChapter(chapter.id, RetentionPolicy.OFFLINE)

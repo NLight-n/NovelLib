@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.drnishanth.novellib.core.database.entities.LibraryEntryEntity
 import com.drnishanth.novellib.core.database.entities.NovelEntity
 import com.drnishanth.novellib.core.database.entities.SourceEntity
@@ -38,11 +39,20 @@ interface NovelDao {
     @Query("SELECT * FROM novels WHERE id = :novelId LIMIT 1")
     suspend fun getNovelById(novelId: String): NovelEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertNovel(novel: NovelEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Update
+    suspend fun updateNovel(novel: NovelEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertSource(source: SourceEntity)
+
+    @Update
+    suspend fun updateSource(source: SourceEntity)
+
+    @Query("UPDATE sources SET last_checked_at = :lastCheckedAt, last_successful_check_at = :lastSuccessfulCheckAt WHERE id = :sourceId")
+    suspend fun updateSourceCheckTime(sourceId: String, lastCheckedAt: Long, lastSuccessfulCheckAt: Long)
 
     @Query("SELECT * FROM sources WHERE source_url = :sourceUrl LIMIT 1")
     suspend fun getSourceByUrl(sourceUrl: String): SourceEntity?
@@ -55,6 +65,12 @@ interface NovelDao {
 
     @Query("DELETE FROM library_entries WHERE profile_id = :profileId AND novel_id = :novelId")
     suspend fun removeNovelFromLibrary(profileId: String, novelId: String)
+
+    @Query("SELECT COUNT(*) FROM library_entries WHERE novel_id = :novelId")
+    suspend fun getLibraryEntryCountForNovel(novelId: String): Int
+
+    @Query("DELETE FROM novels WHERE id = :novelId")
+    suspend fun deleteNovel(novelId: String)
 
     @Query("SELECT COUNT(*) FROM library_entries WHERE profile_id = :profileId AND novel_id = :novelId")
     suspend fun isNovelInLibrary(profileId: String, novelId: String): Int

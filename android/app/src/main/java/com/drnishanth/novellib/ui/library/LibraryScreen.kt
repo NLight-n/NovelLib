@@ -1,5 +1,6 @@
 package com.drnishanth.novellib.ui.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material.icons.filled.Sync
@@ -29,6 +31,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -70,6 +73,7 @@ fun LibraryScreen(
     val novels by viewModel.novels.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var novelPendingRemoval by remember { mutableStateOf<NovelWithEntry?>(null) }
 
     LaunchedEffect(uiState.importSuccessMessage) {
         uiState.importSuccessMessage?.let { msg ->
@@ -179,7 +183,8 @@ fun LibraryScreen(
                     items(novels) { novel ->
                         NovelGridCard(
                             novel = novel,
-                            onClick = { onNovelSelected(novel.id) }
+                            onClick = { onNovelSelected(novel.id) },
+                            onDelete = { novelPendingRemoval = novel }
                         )
                     }
                 }
@@ -193,6 +198,48 @@ fun LibraryScreen(
                     onImport = { url -> viewModel.importNovel(url) }
                 )
             }
+
+            novelPendingRemoval?.let { novel ->
+                var alsoDeleteDownloads by remember { mutableStateOf(false) }
+                AlertDialog(
+                    onDismissRequest = { novelPendingRemoval = null },
+                    title = { Text("Remove from Library") },
+                    text = {
+                        Column {
+                            Text("Are you sure you want to remove \"${novel.title}\" from your library?")
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { alsoDeleteDownloads = !alsoDeleteDownloads }
+                            ) {
+                                Checkbox(
+                                    checked = alsoDeleteDownloads,
+                                    onCheckedChange = { alsoDeleteDownloads = it }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Also delete downloaded chapters", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.removeNovelFromLibrary(novel.id, alsoDeleteDownloads)
+                                novelPendingRemoval = null
+                            }
+                        ) {
+                            Text("Remove", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { novelPendingRemoval = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -200,7 +247,8 @@ fun LibraryScreen(
 @Composable
 fun NovelGridCard(
     novel: NovelWithEntry,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: () -> Unit = {}
 ) {
     Card(
         modifier = Modifier
@@ -215,7 +263,8 @@ fun NovelGridCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(110.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
@@ -224,6 +273,20 @@ fun NovelGridCard(
                     modifier = Modifier.size(48.dp),
                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                 )
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(32.dp)
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = "Remove from Library",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))

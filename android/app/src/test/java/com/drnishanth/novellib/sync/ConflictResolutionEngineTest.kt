@@ -228,6 +228,20 @@ class FakeNovelDao : NovelDao {
     override suspend fun removeNovelFromLibrary(profileId: String, novelId: String) {
         entries.removeAll { it.profileId == profileId && it.novelId == novelId }
     }
+    override suspend fun updateNovel(novel: NovelEntity) { novels[novel.id] = novel }
+    override suspend fun updateSource(source: SourceEntity) {
+        sources.removeAll { it.id == source.id }
+        sources.add(source)
+    }
+    override suspend fun updateSourceCheckTime(sourceId: String, lastCheckedAt: Long, lastSuccessfulCheckAt: Long) {
+        val idx = sources.indexOfFirst { it.id == sourceId }
+        if (idx >= 0) {
+            sources[idx] = sources[idx].copy(lastCheckedAt = lastCheckedAt, lastSuccessfulCheckAt = lastSuccessfulCheckAt)
+        }
+    }
+    override suspend fun getLibraryEntryCountForNovel(novelId: String): Int =
+        entries.count { it.novelId == novelId }
+    override suspend fun deleteNovel(novelId: String) { novels.remove(novelId) }
     override suspend fun isNovelInLibrary(profileId: String, novelId: String): Int =
         if (entries.any { it.profileId == profileId && it.novelId == novelId }) 1 else 0
     override suspend fun getLibraryEntry(profileId: String, novelId: String): LibraryEntryEntity? =

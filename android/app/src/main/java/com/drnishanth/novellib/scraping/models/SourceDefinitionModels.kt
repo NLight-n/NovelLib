@@ -59,7 +59,8 @@ data class ChaptersRules(
     val title: SelectorRule,
     val url: SelectorRule,
     @SerialName("published_at")
-    val publishedAt: SelectorRule? = null
+    val publishedAt: SelectorRule? = null,
+    val pagination: SelectorRule? = null
 )
 
 @Serializable

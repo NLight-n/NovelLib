@@ -22,10 +22,10 @@ interface ChapterDao {
     @Query("SELECT * FROM chapters WHERE source_url = :sourceUrl LIMIT 1")
     suspend fun getChapterByUrl(sourceUrl: String): ChapterEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertChapters(chapters: List<ChapterEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertChapter(chapter: ChapterEntity)
 
     @Update

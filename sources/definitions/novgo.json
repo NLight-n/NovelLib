@@ -53,11 +53,17 @@
     }
   },
   "chapters": {
-    "container": "#idData li, ul.ul-list5 li",
+    "container": "#idData li",
+    "pagination": {
+      "selector": "#indexselect option",
+      "type": "attribute",
+      "attribute": "data-url",
+      "transform": ["absolute_url"]
+    },
     "title": {
       "selector": "a.con, a",
       "type": "text",
-      "transform": ["trim"]
+      "transform": ["trim", "decode_html"]
     },
     "url": {
       "selector": "a.con, a",

@@ -224,11 +224,17 @@ object DefaultSourceDefinitions {
             )
         ),
         chapters = ChaptersRules(
-            container = "#idData li, ul.ul-list5 li",
+            container = "#idData li",
+            pagination = SelectorRule(
+                selector = "#indexselect option",
+                type = "attribute",
+                attribute = "data-url",
+                transform = listOf("absolute_url")
+            ),
             title = SelectorRule(
                 selector = "a.con, a",
                 type = "text",
-                transform = listOf("trim")
+                transform = listOf("trim", "decode_html")
             ),
             url = SelectorRule(
                 selector = "a.con, a",

@@ -1,6 +1,7 @@
 package com.drnishanth.novellib.data.repository
 
 import android.content.Context
+import com.drnishanth.novellib.core.utils.HtmlSanitizer
 import com.drnishanth.novellib.core.database.dao.ChapterDao
 import com.drnishanth.novellib.core.database.dao.NovelDao
 import com.drnishanth.novellib.core.database.dao.NovelWithEntry
@@ -149,8 +150,18 @@ class NovelRepository(
         readerPreferencesDao.savePreferences(prefs)
     }
 
-    suspend fun removeFromLibrary(profileId: String, novelId: String) {
+    suspend fun removeFromLibrary(profileId: String, novelId: String, deleteDownloads: Boolean = false) = withContext(Dispatchers.IO) {
+        if (deleteDownloads) {
+            downloadManager?.deleteDownloadedNovel(novelId)
+        }
         novelDao.removeNovelFromLibrary(profileId, novelId)
+        val remaining = novelDao.getLibraryEntryCountForNovel(novelId)
+        if (remaining == 0) {
+            if (!deleteDownloads) {
+                downloadManager?.deleteDownloadedNovel(novelId)
+            }
+            novelDao.deleteNovel(novelId)
+        }
     }
 
     /**
@@ -172,16 +183,24 @@ class NovelRepository(
             val novelId = existingSource?.novelId ?: UUID.randomUUID().toString()
             val sourceId = existingSource?.id ?: UUID.randomUUID().toString()
 
+            val cleanDescription = HtmlSanitizer.cleanHtmlSynopsis(scrapedNovel.description)
+            val cleanTitle = HtmlSanitizer.cleanTitle(scrapedNovel.title)
+            val cleanAuthor = HtmlSanitizer.cleanTitle(scrapedNovel.author)
+
             val novelEntity = NovelEntity(
                 id = novelId,
-                title = scrapedNovel.title,
-                author = scrapedNovel.author,
-                description = scrapedNovel.description,
+                title = cleanTitle,
+                author = cleanAuthor,
+                description = cleanDescription,
                 coverUrl = scrapedNovel.coverUrl,
                 status = scrapedNovel.status,
                 updatedAt = System.currentTimeMillis()
             )
-            novelDao.insertNovel(novelEntity)
+            if (existingSource != null) {
+                novelDao.updateNovel(novelEntity)
+            } else {
+                novelDao.insertNovel(novelEntity)
+            }
 
             val sourceEntity = SourceEntity(
                 id = sourceId,
@@ -191,7 +210,11 @@ class NovelRepository(
                 lastCheckedAt = System.currentTimeMillis(),
                 lastSuccessfulCheckAt = System.currentTimeMillis()
             )
-            novelDao.insertSource(sourceEntity)
+            if (existingSource != null) {
+                novelDao.updateSource(sourceEntity)
+            } else {
+                novelDao.insertSource(sourceEntity)
+            }
 
             // Map and persist chapters
             val chapterEntities = scrapedChapters.map { item ->
@@ -355,11 +378,10 @@ class NovelRepository(
                     allNewChapters.addAll(newEntities)
                 }
 
-                novelDao.insertSource(
-                    source.copy(
-                        lastCheckedAt = System.currentTimeMillis(),
-                        lastSuccessfulCheckAt = System.currentTimeMillis()
-                    )
+                novelDao.updateSourceCheckTime(
+                    sourceId = source.id,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    lastSuccessfulCheckAt = System.currentTimeMillis()
                 )
                 rollbackManager?.recordSuccess(def.id)
             }
