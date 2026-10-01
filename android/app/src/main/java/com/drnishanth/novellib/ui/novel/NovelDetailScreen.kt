@@ -1,23 +1,35 @@
 package com.drnishanth.novellib.ui.novel
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -59,7 +71,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,11 +83,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.SubcomposeAsyncImage
 import com.drnishanth.novellib.core.database.entities.ChapterEntity
 import com.drnishanth.novellib.core.utils.HtmlSanitizer
 import com.drnishanth.novellib.downloads.models.ChapterDownloadStatus
@@ -196,18 +214,86 @@ fun NovelDetailScreen(
                 item {
                     novel?.let { n ->
                         Column(modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = n.title,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "By ${n.author}  •  ${n.status}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .width(92.dp)
+                                        .height(132.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                    ),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (!n.coverUrl.isNullOrBlank()) {
+                                            SubcomposeAsyncImage(
+                                                model = n.coverUrl,
+                                                contentDescription = n.title,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize(),
+                                                loading = {
+                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                                    }
+                                                },
+                                                error = {
+                                                    Icon(
+                                                        Icons.Default.Book,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(40.dp),
+                                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                                    )
+                                                }
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.Book,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(40.dp),
+                                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(132.dp),
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = n.title,
+                                        style = MaterialTheme.typography.titleLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "By ${n.author}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = n.status,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
 
                             // Storage Mode Badge & Controls
                             Row(
@@ -378,6 +464,13 @@ fun NovelDetailScreen(
                     )
                 }
             }
+
+            FastScrollbarWithChapterBadge(
+                listState = listState,
+                chapters = sortedChapters,
+                coroutineScope = coroutineScope,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            )
 
             // Storage Policy Configuration Dialog
             if (uiState.showStoragePolicyDialog) {
@@ -691,4 +784,152 @@ fun StoragePolicyDialog(
             }
         }
     )
+}
+
+@Composable
+fun FastScrollbarWithChapterBadge(
+    listState: LazyListState,
+    chapters: List<ChapterEntity>,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    modifier: Modifier = Modifier
+) {
+    if (chapters.size < 10) return
+
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
+
+    // Natural scroll fraction derived from LazyListState
+    val scrollFraction by remember {
+        derivedStateOf {
+            val totalItems = listState.layoutInfo.totalItemsCount
+            if (totalItems <= 1) 0f
+            else {
+                val firstVisible = listState.firstVisibleItemIndex
+                (firstVisible.toFloat() / (totalItems - 1).coerceAtLeast(1)).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    val effectiveFraction = if (isDragging) dragFraction else scrollFraction
+    val currentChapterIndex = remember(effectiveFraction, chapters.size) {
+        (effectiveFraction * (chapters.size - 1)).toInt().coerceIn(0, chapters.size - 1)
+    }
+    val currentChapter = chapters.getOrNull(currentChapterIndex)
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(44.dp)
+            .padding(vertical = 16.dp)
+    ) {
+        val trackHeightPx = constraints.maxHeight.toFloat()
+        val thumbHeightDp = 44.dp
+        val density = LocalDensity.current
+        val thumbHeightPx = with(density) { thumbHeightDp.toPx() }
+        val maxThumbTravel = (trackHeightPx - thumbHeightPx).coerceAtLeast(1f)
+
+        val thumbOffsetY = with(density) {
+            (effectiveFraction * maxThumbTravel).toDp()
+        }
+
+        val badgeOffsetY = with(density) {
+            (effectiveFraction * trackHeightPx - 24.dp.toPx()).coerceIn(0f, (trackHeightPx - 48.dp.toPx()).coerceAtLeast(0f)).toDp()
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(chapters.size, trackHeightPx) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        isDragging = true
+                        var touchY = down.position.y.coerceIn(0f, trackHeightPx)
+                        dragFraction = (touchY / trackHeightPx).coerceIn(0f, 1f)
+                        val idx = (dragFraction * (chapters.size - 1)).toInt().coerceIn(0, chapters.size - 1)
+                        coroutineScope.launch {
+                            listState.scrollToItem(1 + idx)
+                        }
+
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull() ?: break
+                            if (!change.pressed) {
+                                break
+                            }
+                            change.consume()
+                            touchY = change.position.y.coerceIn(0f, trackHeightPx)
+                            dragFraction = (touchY / trackHeightPx).coerceIn(0f, 1f)
+                            val targetIdx = (dragFraction * (chapters.size - 1)).toInt().coerceIn(0, chapters.size - 1)
+                            coroutineScope.launch {
+                                listState.scrollToItem(1 + targetIdx)
+                            }
+                        }
+                        isDragging = false
+                    }
+                }
+        ) {
+            // Track line (subtle vertical guide on right side)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 4.dp)
+                    .width(3.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(1.5.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = if (isDragging) 0.25f else 0.08f))
+            )
+
+            // Scrollbar Thumb (pill handle)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(y = thumbOffsetY)
+                    .padding(end = 2.dp)
+                    .width(8.dp)
+                    .height(thumbHeightDp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(
+                        if (isDragging) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                    )
+            )
+
+            // Floating Tooltip Badge showing Chapter Number while dragging or active
+            AnimatedVisibility(
+                visible = isDragging && currentChapter != null,
+                enter = fadeIn() + scaleIn(),
+                exit = fadeOut() + scaleOut(),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (-32).dp, y = badgeOffsetY)
+            ) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    ),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Ch. ${currentChapter?.chapterNumber ?: (currentChapterIndex + 1)}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

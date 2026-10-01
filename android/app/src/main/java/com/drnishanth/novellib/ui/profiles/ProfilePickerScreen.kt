@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
@@ -29,14 +30,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +64,14 @@ fun ProfilePickerScreen(
 ) {
     val profiles by viewModel.profiles.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let { msg ->
+            snackbarHostState.showSnackbar(msg)
+            viewModel.clearMessages()
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -72,7 +85,8 @@ fun ProfilePickerScreen(
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Add Profile")
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Box(
             modifier = Modifier
@@ -133,6 +147,9 @@ fun ProfilePickerScreen(
                                 viewModel.selectOrUnlockProfile(profile) {
                                     onProfileSelected(profile)
                                 }
+                            },
+                            onEdit = {
+                                viewModel.showEditProfileDialog(profile)
                             }
                         )
                     }
@@ -146,6 +163,29 @@ fun ProfilePickerScreen(
                     onDismiss = { viewModel.dismissCreateProfileDialog() },
                     onCreate = { user, display, pass ->
                         viewModel.createProfile(user, display, pass)
+                    }
+                )
+            }
+
+            // Edit Profile Dialog
+            uiState.selectedProfileForEdit?.let { profileToEdit ->
+                EditProfileDialog(
+                    profile = profileToEdit,
+                    canDelete = profiles.size > 1,
+                    errorMessage = uiState.errorMessage,
+                    onDismiss = { viewModel.dismissEditProfileDialog() },
+                    onSave = { newUsername, newDisplayName, currentPass, newPass, removePass ->
+                        viewModel.updateProfile(
+                            profileId = profileToEdit.id,
+                            newUsername = newUsername,
+                            newDisplayName = newDisplayName,
+                            currentPassword = currentPass,
+                            newPassword = newPass,
+                            removePassword = removePass
+                        )
+                    },
+                    onDelete = {
+                        viewModel.deleteProfile(profileToEdit)
                     }
                 )
             }
@@ -171,7 +211,8 @@ fun ProfilePickerScreen(
 @Composable
 fun ProfileCard(
     profile: UserProfileEntity,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onEdit: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -223,6 +264,19 @@ fun ProfileCard(
                     Icons.Default.Lock,
                     contentDescription = "Password Protected",
                     tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit Profile",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }

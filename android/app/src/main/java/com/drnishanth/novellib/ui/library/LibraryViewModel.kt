@@ -102,4 +102,44 @@ class LibraryViewModel(
     fun switchProfile() {
         profileRepository.logout()
     }
+
+    val showEditProfileDialog = MutableStateFlow(false)
+    val editProfileError = MutableStateFlow<String?>(null)
+
+    fun openEditProfile() {
+        editProfileError.value = null
+        showEditProfileDialog.value = true
+    }
+
+    fun closeEditProfile() {
+        editProfileError.value = null
+        showEditProfileDialog.value = false
+    }
+
+    fun updateProfile(
+        newUsername: String,
+        newDisplayName: String,
+        currentPassword: String? = null,
+        newPassword: String? = null,
+        removePassword: Boolean = false
+    ) {
+        val current = activeProfile.value ?: return
+        viewModelScope.launch {
+            val result = profileRepository.updateProfile(
+                profileId = current.id,
+                newUsername = newUsername,
+                newDisplayName = newDisplayName,
+                currentPassword = currentPassword,
+                newPassword = newPassword,
+                removePassword = removePassword
+            )
+            if (result.isSuccess) {
+                showEditProfileDialog.value = false
+                editProfileError.value = null
+                _uiState.value = _uiState.value.copy(importSuccessMessage = "Profile updated successfully!")
+            } else {
+                editProfileError.value = result.exceptionOrNull()?.message ?: "Failed to update profile"
+            }
+        }
+    }
 }

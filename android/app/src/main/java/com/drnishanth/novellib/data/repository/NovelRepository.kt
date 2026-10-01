@@ -380,7 +380,11 @@ class NovelRepository(
 
             for (source in sources) {
                 val def = findMatchingDefinition(source.sourceUrl) ?: continue
-                val (_, scrapedChapters) = scraperEngine.scrapeNovel(source.sourceUrl, def)
+                val (scrapedNovel, scrapedChapters) = scraperEngine.scrapeNovel(source.sourceUrl, def)
+
+                if (novel.coverUrl.isNullOrBlank() && !scrapedNovel.coverUrl.isNullOrBlank()) {
+                    novelDao.updateNovel(novel.copy(coverUrl = scrapedNovel.coverUrl))
+                }
 
                 val toInsert = mutableListOf<ChapterEntity>()
                 val toUpdate = mutableListOf<ChapterEntity>()

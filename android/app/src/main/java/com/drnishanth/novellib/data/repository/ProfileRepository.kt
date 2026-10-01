@@ -95,6 +95,88 @@ class ProfileRepository(
         _activeProfile.value = profile.copy(lastActiveAt = System.currentTimeMillis())
     }
 
+    suspend fun updateProfile(
+        profileId: String,
+        newUsername: String,
+        newDisplayName: String,
+        currentPassword: String? = null,
+        newPassword: String? = null,
+        removePassword: Boolean = false
+    ): Result<UserProfileEntity> {
+        val existing = userProfileDao.getProfileById(profileId)
+            ?: return Result.failure(IllegalArgumentException("Profile not found"))
+
+        val trimmedUsername = newUsername.trim()
+        if (trimmedUsername.isBlank()) {
+            return Result.failure(IllegalArgumentException("Username cannot be empty"))
+        }
+
+        // If username changed, check uniqueness
+        if (!trimmedUsername.equals(existing.username, ignoreCase = true)) {
+            val taken = userProfileDao.getProfileByUsername(trimmedUsername)
+            if (taken != null && taken.id != profileId) {
+                return Result.failure(IllegalStateException("Username '@$trimmedUsername' is already taken"))
+            }
+        }
+
+        var updatedPasswordHash = existing.passwordHash
+        var updatedPasswordEnabled = existing.passwordEnabled
+
+        if (existing.passwordEnabled) {
+            if (currentPassword.isNullOrBlank()) {
+                return Result.failure(IllegalArgumentException("Current password is required to update profile"))
+            }
+            val valid = existing.passwordHash?.let {
+                Argon2SecurityManager.verifyPassword(currentPassword, it)
+            } ?: false
+            if (!valid) {
+                return Result.failure(IllegalArgumentException("Current password is incorrect"))
+            }
+
+            if (removePassword) {
+                updatedPasswordHash = null
+                updatedPasswordEnabled = false
+            } else if (!newPassword.isNullOrBlank()) {
+                updatedPasswordHash = Argon2SecurityManager.hashPassword(newPassword)
+                updatedPasswordEnabled = true
+            }
+        } else {
+            // Profile currently does not have a password
+            if (!newPassword.isNullOrBlank()) {
+                updatedPasswordHash = Argon2SecurityManager.hashPassword(newPassword)
+                updatedPasswordEnabled = true
+            }
+        }
+
+        val updated = existing.copy(
+            username = trimmedUsername,
+            displayName = newDisplayName.ifBlank { trimmedUsername },
+            passwordHash = updatedPasswordHash,
+            passwordEnabled = updatedPasswordEnabled
+        )
+
+        userProfileDao.updateProfile(updated)
+
+        if (_activeProfile.value?.id == profileId) {
+            _activeProfile.value = updated
+        }
+
+        return Result.success(updated)
+    }
+
+    suspend fun deleteProfile(profile: UserProfileEntity): Result<Unit> {
+        val count = userProfileDao.getProfileCount()
+        if (count <= 1) {
+            return Result.failure(IllegalStateException("Cannot delete the only profile"))
+        }
+        userProfileDao.deleteProfile(profile)
+        if (_activeProfile.value?.id == profile.id) {
+            val nextProfile = userProfileDao.getAllProfiles().firstOrNull()?.firstOrNull { it.id != profile.id }
+            _activeProfile.value = nextProfile
+        }
+        return Result.success(Unit)
+    }
+
     fun logout() {
         _activeProfile.value = null
     }
