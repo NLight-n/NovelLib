@@ -28,11 +28,13 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -73,7 +75,8 @@ fun LibraryScreen(
     onNovelSelected: (String) -> Unit,
     onSwitchProfile: () -> Unit,
     onOpenSources: () -> Unit = {},
-    onOpenSync: () -> Unit = {}
+    onOpenSync: () -> Unit = {},
+    onOpenBrowser: (String) -> Unit = {}
 ) {
     val activeProfile by viewModel.activeProfile.collectAsState()
     val novels by viewModel.novels.collectAsState()
@@ -137,6 +140,9 @@ fun LibraryScreen(
                             Icon(Icons.Default.Refresh, contentDescription = "Check All Updates")
                         }
                     }
+                    IconButton(onClick = { onOpenBrowser("https://www.royalroad.com") }) {
+                        Icon(Icons.Default.Public, contentDescription = "Browse Sources")
+                    }
                     IconButton(onClick = onOpenSources) {
                         Icon(Icons.Default.CloudDownload, contentDescription = "Manage Sources")
                     }
@@ -185,7 +191,7 @@ fun LibraryScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Add a novel URL using the button below or share a page from your mobile browser.",
+                        "Explore web fiction catalogs or add novel URLs directly to your library.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -193,6 +199,12 @@ fun LibraryScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { viewModel.showAddNovelDialog() }) {
                         Text("Add Novel by URL")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(onClick = { onOpenBrowser("https://www.royalroad.com") }) {
+                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Explore Sources in App")
                     }
                 }
             } else {
@@ -270,13 +282,14 @@ fun LibraryScreen(
                     canDelete = false,
                     errorMessage = editProfileError,
                     onDismiss = { viewModel.closeEditProfile() },
-                    onSave = { newUsername, newDisplayName, currentPass, newPass, removePass ->
+                    onSave = { newUsername, newDisplayName, currentPass, newPass, removePass, blockedTags ->
                         viewModel.updateProfile(
                             newUsername = newUsername,
                             newDisplayName = newDisplayName,
                             currentPassword = currentPass,
                             newPassword = newPass,
-                            removePassword = removePass
+                            removePassword = removePass,
+                            blockedTags = blockedTags
                         )
                     }
                 )

@@ -46,11 +46,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.drnishanth.novellib.core.database.entities.SourceDefinitionEntity
 
+import androidx.compose.material.icons.filled.Public
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SourcesScreen(
     viewModel: SourcesViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenBrowser: (String) -> Unit = {}
 ) {
     val installed by viewModel.installedDefinitions.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
@@ -77,6 +80,11 @@ fun SourcesScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = { onOpenBrowser("https://www.royalroad.com") }
+                    ) {
+                        Icon(Icons.Default.Public, contentDescription = "Open In-App Browser")
+                    }
                     IconButton(
                         onClick = { viewModel.checkForUpdates() },
                         enabled = !uiState.isCheckingUpdates
@@ -152,6 +160,7 @@ fun SourcesScreen(
                         definition = definition,
                         updateStatus = updateStatus,
                         isUpdating = uiState.isUpdatingSourceId == definition.id,
+                        onBrowse = { onOpenBrowser(resolveBrowseUrl(definition)) },
                         onUpdate = { viewModel.updateSource(definition.id) },
                         onRollback = { viewModel.rollbackSource(definition.id) },
                         onToggleEnabled = { viewModel.toggleSourceEnabled(definition.id, definition.enabled) }
@@ -162,11 +171,29 @@ fun SourcesScreen(
     }
 }
 
+private fun resolveBrowseUrl(definition: SourceDefinitionEntity): String {
+    return when (definition.id) {
+        "royalroad" -> "https://www.royalroad.com"
+        "novgo" -> "https://novgo.net"
+        "scribblehub" -> "https://www.scribblehub.com"
+        else -> {
+            try {
+                val json = org.json.JSONObject(definition.jsonContent)
+                val domains = json.getJSONObject("match").getJSONArray("domains")
+                if (domains.length() > 0) "https://${domains.getString(0)}" else "https://www.royalroad.com"
+            } catch (_: Exception) {
+                "https://www.royalroad.com"
+            }
+        }
+    }
+}
+
 @Composable
 fun SourceItemCard(
     definition: SourceDefinitionEntity,
     updateStatus: com.drnishanth.novellib.scraping.registry.SourceUpdateStatus?,
     isUpdating: Boolean,
+    onBrowse: () -> Unit,
     onUpdate: () -> Unit,
     onRollback: () -> Unit,
     onToggleEnabled: () -> Unit
@@ -236,6 +263,15 @@ fun SourceItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                OutlinedButton(
+                    onClick = onBrowse,
+                    modifier = Modifier.padding(end = 8.dp)
+                ) {
+                    Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Browse", fontSize = 12.sp)
+                }
+
                 if (definition.previousJsonContent != null) {
                     OutlinedButton(
                         onClick = onRollback,

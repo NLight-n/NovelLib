@@ -21,6 +21,10 @@ import com.drnishanth.novellib.core.sync.models.SyncPayload
 import com.drnishanth.novellib.core.sync.models.SyncProfileData
 import com.drnishanth.novellib.core.sync.models.SyncReadingProgressItem
 import com.drnishanth.novellib.core.sync.models.SyncSourceItem
+import com.drnishanth.novellib.core.database.entities.NovelTagCrossRef
+import com.drnishanth.novellib.core.database.entities.TagEntity
+import com.drnishanth.novellib.core.database.models.NovelWithTags
+import com.drnishanth.novellib.core.sync.models.SyncTagItem
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -194,6 +198,57 @@ class ConflictResolutionEngineTest {
         assertEquals(null, importedProfile?.passwordHash)
         assertTrue(importedProfile?.passwordEnabled == true)
     }
+
+    @Test
+    fun testNovelTagsSetUnionMerging() = runBlocking {
+        val profile = UserProfileEntity(id = "p1", username = "alice", displayName = "Alice", passwordHash = "h")
+        userProfileDao.insertProfile(profile)
+
+        val novel = NovelEntity(id = "n_union", title = "Union Novel", author = "Author", description = "", coverUrl = null, status = "ongoing")
+        novelDao.insertNovel(novel)
+
+        // Seed local tags: Fantasy, Progression
+        val tagFantasy = TagEntity(id = "fantasy", name = "Fantasy", isWarning = false)
+        val tagProgression = TagEntity(id = "progression", name = "Progression", isWarning = false)
+        novelDao.insertTags(listOf(tagFantasy, tagProgression))
+        novelDao.insertNovelTagCrossRefs(
+            listOf(
+                NovelTagCrossRef(novelId = "n_union", tagId = "fantasy"),
+                NovelTagCrossRef(novelId = "n_union", tagId = "progression")
+            )
+        )
+
+        // Remote payload has: Progression, LitRPG, Graphic Violence (warning)
+        val incomingPayload = SyncPayload(
+            senderDeviceId = "dev_peer",
+            senderDeviceName = "Peer Device",
+            profile = SyncProfileData(username = "alice", displayName = "Alice"),
+            novels = listOf(
+                SyncNovelItem(
+                    novelId = "n_union",
+                    title = "Union Novel",
+                    author = "Author",
+                    description = "",
+                    tags = listOf(
+                        SyncTagItem(id = "progression", name = "Progression", isWarning = false),
+                        SyncTagItem(id = "litrpg", name = "LitRPG", isWarning = false),
+                        SyncTagItem(id = "graphic_violence", name = "Graphic Violence", isWarning = true)
+                    )
+                )
+            )
+        )
+
+        val result = engine.mergePayload(incomingPayload, destinationProfileId = "p1")
+        assertTrue(result.success)
+
+        // Merged tags must be Set-Union of local and remote tags: Fantasy, Progression, LitRPG, Graphic Violence
+        val mergedTags = novelDao.getTagsForNovel("n_union")
+        val mergedTagIds = mergedTags.map { it.id }.toSet()
+        assertEquals(setOf("fantasy", "progression", "litrpg", "graphic_violence"), mergedTagIds)
+        val warningTag = mergedTags.firstOrNull { it.id == "graphic_violence" }
+        assertTrue(warningTag != null)
+        assertTrue(warningTag?.isWarning == true)
+    }
 }
 
 // In-Memory Fake DAOs for fast and reliable JVM testing
@@ -214,8 +269,87 @@ class FakeNovelDao : NovelDao {
     private val novels = mutableMapOf<String, NovelEntity>()
     private val sources = mutableListOf<SourceEntity>()
     private val entries = mutableListOf<LibraryEntryEntity>()
+    private val tags = mutableMapOf<String, TagEntity>()
+    private val novelTags = mutableListOf<NovelTagCrossRef>()
 
     override fun getNovelsForProfile(profileId: String): Flow<List<NovelWithEntry>> = flowOf(emptyList())
+
+    override fun getNovelsForProfileExcludingTags(
+        profileId: String,
+        excludedTagIds: List<String>,
+        excludedTagNamesLower: List<String>
+    ): Flow<List<NovelWithEntry>> = flowOf(emptyList())
+
+    override suspend fun getNovelWithTags(novelId: String): NovelWithTags? {
+        val novel = novels[novelId] ?: return null
+        val tagIds = novelTags.filter { it.novelId == novelId }.map { it.tagId }.toSet()
+        val tagList = tags.values.filter { it.id in tagIds }
+        return NovelWithTags(novel, tagList)
+    }
+
+    override fun getNovelWithTagsFlow(novelId: String): Flow<NovelWithTags?> {
+        val novel = novels[novelId] ?: return flowOf(null)
+        val tagIds = novelTags.filter { it.novelId == novelId }.map { it.tagId }.toSet()
+        val tagList = tags.values.filter { it.id in tagIds }
+        return flowOf(NovelWithTags(novel, tagList))
+    }
+
+    override fun getAllNovelsWithTags(): Flow<List<NovelWithTags>> {
+        val list = novels.values.map { novel ->
+            val tagIds = novelTags.filter { it.novelId == novel.id }.map { it.tagId }.toSet()
+            val tagList = tags.values.filter { it.id in tagIds }
+            NovelWithTags(novel, tagList)
+        }
+        return flowOf(list)
+    }
+
+    override fun getNovelsExcludingTags(
+        excludedTagIds: List<String>,
+        excludedTagNamesLower: List<String>
+    ): Flow<List<NovelWithTags>> {
+        val list = novels.values.mapNotNull { novel ->
+            val tagIds = novelTags.filter { it.novelId == novel.id }.map { it.tagId }.toSet()
+            val tagList = tags.values.filter { it.id in tagIds }
+            val excluded = tagList.any { it.id in excludedTagIds || it.name.lowercase() in excludedTagNamesLower }
+            if (excluded) null else NovelWithTags(novel, tagList)
+        }
+        return flowOf(list)
+    }
+
+    override suspend fun insertTag(tag: TagEntity) {
+        tags[tag.id] = tag
+    }
+
+    override suspend fun insertTags(tags: List<TagEntity>) {
+        tags.forEach { this.tags[it.id] = it }
+    }
+
+    override suspend fun insertNovelTagCrossRef(crossRef: NovelTagCrossRef) {
+        if (!novelTags.any { it.novelId == crossRef.novelId && it.tagId == crossRef.tagId }) {
+            novelTags.add(crossRef)
+        }
+    }
+
+    override suspend fun insertNovelTagCrossRefs(crossRefs: List<NovelTagCrossRef>) {
+        crossRefs.forEach { insertNovelTagCrossRef(it) }
+    }
+
+    override suspend fun getTagsForNovel(novelId: String): List<TagEntity> {
+        val tagIds = novelTags.filter { it.novelId == novelId }.map { it.tagId }.toSet()
+        return tags.values.filter { it.id in tagIds }
+    }
+
+    override fun getTagsForNovelFlow(novelId: String): Flow<List<TagEntity>> {
+        val tagIds = novelTags.filter { it.novelId == novelId }.map { it.tagId }.toSet()
+        return flowOf(tags.values.filter { it.id in tagIds })
+    }
+
+    override suspend fun getAllTags(): List<TagEntity> = tags.values.toList()
+
+    override suspend fun deleteTagsForNovel(novelId: String) {
+        novelTags.removeAll { it.novelId == novelId }
+    }
+
     override suspend fun getNovelById(novelId: String): NovelEntity? = novels[novelId]
     override suspend fun insertNovel(novel: NovelEntity) { novels[novel.id] = novel }
     override suspend fun insertSource(source: SourceEntity) { sources.add(source) }

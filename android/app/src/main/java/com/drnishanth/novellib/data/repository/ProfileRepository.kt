@@ -101,7 +101,8 @@ class ProfileRepository(
         newDisplayName: String,
         currentPassword: String? = null,
         newPassword: String? = null,
-        removePassword: Boolean = false
+        removePassword: Boolean = false,
+        blockedTags: List<String>? = null
     ): Result<UserProfileEntity> {
         val existing = userProfileDao.getProfileById(profileId)
             ?: return Result.failure(IllegalArgumentException("Profile not found"))
@@ -152,7 +153,8 @@ class ProfileRepository(
             username = trimmedUsername,
             displayName = newDisplayName.ifBlank { trimmedUsername },
             passwordHash = updatedPasswordHash,
-            passwordEnabled = updatedPasswordEnabled
+            passwordEnabled = updatedPasswordEnabled,
+            blockedTags = blockedTags ?: existing.blockedTags
         )
 
         userProfileDao.updateProfile(updated)
@@ -161,6 +163,17 @@ class ProfileRepository(
             _activeProfile.value = updated
         }
 
+        return Result.success(updated)
+    }
+
+    suspend fun updateBlockedTags(profileId: String, blockedTags: List<String>): Result<UserProfileEntity> {
+        val existing = userProfileDao.getProfileById(profileId)
+            ?: return Result.failure(IllegalArgumentException("Profile not found"))
+        val updated = existing.copy(blockedTags = blockedTags)
+        userProfileDao.updateProfile(updated)
+        if (_activeProfile.value?.id == profileId) {
+            _activeProfile.value = updated
+        }
         return Result.success(updated)
     }
 

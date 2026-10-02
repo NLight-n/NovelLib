@@ -41,6 +41,13 @@ data class PairingConfirm(
 )
 
 @Serializable
+data class SyncTagItem(
+    val id: String,
+    val name: String,
+    val isWarning: Boolean = false
+)
+
+@Serializable
 data class SyncNovelItem(
     val novelId: String,
     val title: String,
@@ -51,7 +58,8 @@ data class SyncNovelItem(
     val sources: List<SyncSourceItem> = emptyList(),
     val chapters: List<SyncChapterItem> = emptyList(),
     val libraryEntry: SyncLibraryEntryItem? = null,
-    val readingProgress: SyncReadingProgressItem? = null
+    val readingProgress: SyncReadingProgressItem? = null,
+    val tags: List<SyncTagItem> = emptyList()
 )
 
 @Serializable
@@ -109,7 +117,8 @@ data class SyncProfileData(
     val displayName: String,
     val avatar: String? = null,
     val isPasswordProtected: Boolean = false,
-    val preferences: SyncPreferencesItem? = null
+    val preferences: SyncPreferencesItem? = null,
+    val blockedTags: List<String> = emptyList()
 )
 
 @Serializable

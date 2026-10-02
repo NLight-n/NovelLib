@@ -8,7 +8,10 @@ import androidx.room.Transaction
 import androidx.room.Update
 import com.drnishanth.novellib.core.database.entities.LibraryEntryEntity
 import com.drnishanth.novellib.core.database.entities.NovelEntity
+import com.drnishanth.novellib.core.database.entities.NovelTagCrossRef
 import com.drnishanth.novellib.core.database.entities.SourceEntity
+import com.drnishanth.novellib.core.database.entities.TagEntity
+import com.drnishanth.novellib.core.database.models.NovelWithTags
 import kotlinx.coroutines.flow.Flow
 
 data class NovelWithEntry(
@@ -35,6 +38,86 @@ interface NovelDao {
         ORDER BY COALESCE(l.last_opened_at, l.added_at) DESC
     """)
     fun getNovelsForProfile(profileId: String): Flow<List<NovelWithEntry>>
+
+    @Query("""
+        SELECT n.id, n.title, n.author, n.description, n.cover_url AS coverUrl, 
+               n.status, l.added_at AS addedAt, l.last_opened_at AS lastOpenedAt, 
+               l.download_mode AS downloadMode
+        FROM novels n
+        INNER JOIN library_entries l ON n.id = l.novel_id
+        WHERE l.profile_id = :profileId
+          AND n.id NOT IN (
+              SELECT r.novel_id 
+              FROM novel_tag_cross_ref r
+              INNER JOIN tags t ON r.tag_id = t.id
+              WHERE t.id IN (:excludedTagIds) OR LOWER(t.name) IN (:excludedTagNamesLower)
+          )
+        ORDER BY COALESCE(l.last_opened_at, l.added_at) DESC
+    """)
+    fun getNovelsForProfileExcludingTags(
+        profileId: String,
+        excludedTagIds: List<String>,
+        excludedTagNamesLower: List<String>
+    ): Flow<List<NovelWithEntry>>
+
+    @Transaction
+    @Query("SELECT * FROM novels WHERE id = :novelId LIMIT 1")
+    suspend fun getNovelWithTags(novelId: String): NovelWithTags?
+
+    @Transaction
+    @Query("SELECT * FROM novels WHERE id = :novelId LIMIT 1")
+    fun getNovelWithTagsFlow(novelId: String): Flow<NovelWithTags?>
+
+    @Transaction
+    @Query("SELECT * FROM novels")
+    fun getAllNovelsWithTags(): Flow<List<NovelWithTags>>
+
+    @Transaction
+    @Query("""
+        SELECT * FROM novels
+        WHERE id NOT IN (
+            SELECT r.novel_id 
+            FROM novel_tag_cross_ref r
+            INNER JOIN tags t ON r.tag_id = t.id
+            WHERE t.id IN (:excludedTagIds) OR LOWER(t.name) IN (:excludedTagNamesLower)
+        )
+    """)
+    fun getNovelsExcludingTags(
+        excludedTagIds: List<String>,
+        excludedTagNamesLower: List<String>
+    ): Flow<List<NovelWithTags>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTag(tag: TagEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTags(tags: List<TagEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertNovelTagCrossRef(crossRef: NovelTagCrossRef)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertNovelTagCrossRefs(crossRefs: List<NovelTagCrossRef>)
+
+    @Query("""
+        SELECT t.* FROM tags t
+        INNER JOIN novel_tag_cross_ref r ON t.id = r.tag_id
+        WHERE r.novel_id = :novelId
+    """)
+    suspend fun getTagsForNovel(novelId: String): List<TagEntity>
+
+    @Query("""
+        SELECT t.* FROM tags t
+        INNER JOIN novel_tag_cross_ref r ON t.id = r.tag_id
+        WHERE r.novel_id = :novelId
+    """)
+    fun getTagsForNovelFlow(novelId: String): Flow<List<TagEntity>>
+
+    @Query("SELECT * FROM tags")
+    suspend fun getAllTags(): List<TagEntity>
+
+    @Query("DELETE FROM novel_tag_cross_ref WHERE novel_id = :novelId")
+    suspend fun deleteTagsForNovel(novelId: String)
 
     @Query("SELECT * FROM novels WHERE id = :novelId LIMIT 1")
     suspend fun getNovelById(novelId: String): NovelEntity?

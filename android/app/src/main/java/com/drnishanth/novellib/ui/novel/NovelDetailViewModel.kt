@@ -59,6 +59,9 @@ class NovelDetailViewModel(
     val chapters: StateFlow<List<ChapterEntity>> = novelRepository.getChapters(novelId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val tags: StateFlow<List<com.drnishanth.novellib.core.database.entities.TagEntity>> = novelRepository.getTagsForNovel(novelId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val readingProgress: StateFlow<ReadingProgressEntity?> = profileRepository.activeProfile.flatMapLatest { profile ->
         if (profile != null) {
             novelRepository.getReadingProgress(profile.id, novelId)

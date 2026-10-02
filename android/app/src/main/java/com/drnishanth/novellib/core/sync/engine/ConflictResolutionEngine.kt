@@ -10,7 +10,9 @@ import com.drnishanth.novellib.core.database.entities.LibraryEntryEntity
 import com.drnishanth.novellib.core.database.entities.NovelEntity
 import com.drnishanth.novellib.core.database.entities.ReaderPreferencesEntity
 import com.drnishanth.novellib.core.database.entities.ReadingProgressEntity
+import com.drnishanth.novellib.core.database.entities.NovelTagCrossRef
 import com.drnishanth.novellib.core.database.entities.SourceEntity
+import com.drnishanth.novellib.core.database.entities.TagEntity
 import com.drnishanth.novellib.core.database.entities.UserProfileEntity
 import com.drnishanth.novellib.core.sync.models.SyncPayload
 import com.drnishanth.novellib.core.sync.models.SyncResult
@@ -155,6 +157,23 @@ class ConflictResolutionEngine(
                         )
                         chaptersMerged++
                     }
+                }
+
+                // Merge tags (Deterministic Set-Union strategy: Tags_merged = Tags_A union Tags_B)
+                for (tagItem in incomingNovel.tags) {
+                    novelDao.insertTag(
+                        TagEntity(
+                            id = tagItem.id,
+                            name = tagItem.name,
+                            isWarning = tagItem.isWarning
+                        )
+                    )
+                    novelDao.insertNovelTagCrossRef(
+                        NovelTagCrossRef(
+                            novelId = resolvedNovelId,
+                            tagId = tagItem.id
+                        )
+                    )
                 }
 
                 // Merge library membership (Union strategy)

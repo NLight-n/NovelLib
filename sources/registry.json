@@ -1,15 +1,15 @@
 {
-  "version": 5,
-  "updated_at": 1727800000000,
+  "version": 6,
+  "updated_at": 1727870000000,
   "sources": [
     {
       "id": "royalroad",
-      "version": 2,
+      "version": 3,
       "name": "Royal Road",
       "description": "Royal Road online web fiction platform",
       "minimum_engine_version": 1,
       "relative_path": "definitions/royalroad.json",
-      "checksum": "sha256:e1d006fe9dd5eb1589990e1c174d8b4e3f0921ec4c3774f829a316c39eef29b4"
+      "checksum": "sha256:7ed1bf63dd3a1e4b2d934ea4614f7fac89db5d0b62fda81b94a8e99c162bee21"
     },
     {
       "id": "scribblehub",
@@ -27,7 +27,7 @@
       "description": "NovGo online free web novels and light fiction",
       "minimum_engine_version": 1,
       "relative_path": "definitions/novgo.json",
-      "checksum": "sha256:1ccbc6ef5e5e0afd129df81e33adf4b6048c82b4b3313cd14c5915d445bc1ad1"
+      "checksum": "sha256:38645d0a2335009a9be45a78691bc53b4e9505d08398093fc8a9768275be735f"
     }
   ]
 }

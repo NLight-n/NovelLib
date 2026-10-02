@@ -36,5 +36,8 @@ data class UserProfileEntity(
     val updatedAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "last_active_at")
-    val lastActiveAt: Long = System.currentTimeMillis()
+    val lastActiveAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "blocked_tags")
+    val blockedTags: List<String> = emptyList()
 )

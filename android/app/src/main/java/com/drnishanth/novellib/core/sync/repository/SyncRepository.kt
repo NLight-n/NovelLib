@@ -175,7 +175,8 @@ class SyncRepository(
             displayName = profile.displayName,
             avatar = profile.avatar,
             isPasswordProtected = profile.passwordEnabled,
-            preferences = syncPrefs
+            preferences = syncPrefs,
+            blockedTags = profile.blockedTags
         )
 
         val libraryNovels = novelDao.getNovelsForProfile(profileId).firstOrNull() ?: emptyList()
@@ -227,6 +228,14 @@ class SyncRepository(
                 )
             }
 
+            val tags = novelDao.getTagsForNovel(novel.id).map {
+                com.drnishanth.novellib.core.sync.models.SyncTagItem(
+                    id = it.id,
+                    name = it.name,
+                    isWarning = it.isWarning
+                )
+            }
+
             syncNovels.add(
                 SyncNovelItem(
                     novelId = novel.id,
@@ -238,7 +247,8 @@ class SyncRepository(
                     sources = sources,
                     chapters = chapters,
                     libraryEntry = entry,
-                    readingProgress = progress
+                    readingProgress = progress,
+                    tags = tags
                 )
             )
         }

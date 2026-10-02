@@ -84,7 +84,8 @@ class ProfileViewModel(
         newDisplayName: String,
         currentPassword: String? = null,
         newPassword: String? = null,
-        removePassword: Boolean = false
+        removePassword: Boolean = false,
+        blockedTags: List<String>? = null
     ) {
         viewModelScope.launch {
             val result = profileRepository.updateProfile(
@@ -93,7 +94,8 @@ class ProfileViewModel(
                 newDisplayName = newDisplayName,
                 currentPassword = currentPassword,
                 newPassword = newPassword,
-                removePassword = removePassword
+                removePassword = removePassword,
+                blockedTags = blockedTags
             )
             if (result.isSuccess) {
                 _uiState.value = _uiState.value.copy(

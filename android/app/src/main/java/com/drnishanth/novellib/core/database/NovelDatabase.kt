@@ -25,6 +25,9 @@ import com.drnishanth.novellib.core.database.entities.ReadingProgressEntity
 import com.drnishanth.novellib.core.database.entities.SourceDefinitionEntity
 import com.drnishanth.novellib.core.database.entities.SourceEntity
 import com.drnishanth.novellib.core.database.entities.SyncDeviceEntity
+import androidx.room.TypeConverters
+import com.drnishanth.novellib.core.database.entities.NovelTagCrossRef
+import com.drnishanth.novellib.core.database.entities.TagEntity
 import com.drnishanth.novellib.core.database.entities.UserProfileEntity
 
 @Database(
@@ -39,11 +42,14 @@ import com.drnishanth.novellib.core.database.entities.UserProfileEntity
         NotificationEntity::class,
         SourceDefinitionEntity::class,
         SyncDeviceEntity::class,
-        ReadChapterEntity::class
+        ReadChapterEntity::class,
+        TagEntity::class,
+        NovelTagCrossRef::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
+@TypeConverters(Converters::class)
 abstract class NovelDatabase : RoomDatabase() {
     abstract fun userProfileDao(): UserProfileDao
     abstract fun novelDao(): NovelDao
@@ -86,6 +92,34 @@ abstract class NovelDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `tags` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `is_warning` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_tags_name` ON `tags` (`name`)")
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `novel_tag_cross_ref` (
+                        `novel_id` TEXT NOT NULL,
+                        `tag_id` TEXT NOT NULL,
+                        PRIMARY KEY(`novel_id`, `tag_id`),
+                        FOREIGN KEY(`novel_id`) REFERENCES `novels`(`id`) ON DELETE CASCADE,
+                        FOREIGN KEY(`tag_id`) REFERENCES `tags`(`id`) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_novel_tag_cross_ref_novel_id` ON `novel_tag_cross_ref` (`novel_id`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_novel_tag_cross_ref_tag_id` ON `novel_tag_cross_ref` (`tag_id`)")
+
+                db.execSQL("ALTER TABLE `user_profiles` ADD COLUMN `blocked_tags` TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
         fun getInstance(context: Context): NovelDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -93,7 +127,7 @@ abstract class NovelDatabase : RoomDatabase() {
                     NovelDatabase::class.java,
                     "novellib.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

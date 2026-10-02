@@ -1,5 +1,6 @@
 package com.drnishanth.novellib.scraping.engine
 
+import com.drnishanth.novellib.core.network.WebKitCookieJar
 import com.drnishanth.novellib.core.utils.HtmlSanitizer
 import com.drnishanth.novellib.scraping.models.ChapterRule
 import com.drnishanth.novellib.scraping.models.RequestConfig
@@ -22,6 +23,7 @@ import java.util.concurrent.TimeUnit
 
 class SourceDefinitionEngine(
     private val client: OkHttpClient = OkHttpClient.Builder()
+        .cookieJar(WebKitCookieJar)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
@@ -54,6 +56,72 @@ class SourceDefinitionEngine(
     }
 
     /**
+     * Determines whether a given URL specifically matches a novel landing page (not an arbitrary chapter or sub-page).
+     */
+    fun matchesNovelUrl(url: String, definition: SourceDefinition): Boolean {
+        return try {
+            val uri = URI(url)
+            val host = uri.host?.lowercase() ?: return false
+
+            val hostMatches = definition.match.hosts.any { pattern ->
+                host == pattern.lowercase() || host.endsWith("." + pattern.lowercase())
+            }
+            if (!hostMatches) return false
+
+            val lowerUrl = url.lowercase()
+            val isChapter = lowerUrl.contains("/chapter/") ||
+                    lowerUrl.contains("/chapter-") ||
+                    lowerUrl.contains("-chapter-") ||
+                    lowerUrl.contains("/read/") ||
+                    Regex("""/chapter[/-]?\d+""").containsMatchIn(lowerUrl)
+            if (isChapter) return false
+
+            // If a specific novelUrlPattern is configured, check it first
+            if (!definition.match.novelUrlPattern.isNullOrBlank()) {
+                val pattern = definition.match.novelUrlPattern
+                if (pattern.startsWith("^") || pattern.endsWith("$")) {
+                    val regex = pattern.toRegex(RegexOption.IGNORE_CASE)
+                    return regex.containsMatchIn(url)
+                }
+
+                val urlPath = uri.path ?: "/"
+                val patPath = if (pattern.contains("://")) {
+                    val withoutScheme = pattern.substringAfter("://")
+                    val slashIdx = withoutScheme.indexOf('/')
+                    if (slashIdx >= 0) withoutScheme.substring(slashIdx) else "/"
+                } else {
+                    pattern
+                }
+
+                val globRegex = if (patPath.endsWith("/*")) {
+                    val base = patPath.removeSuffix("/*").replace(".", "\\.")
+                    "^$base/.+$"
+                } else {
+                    val escaped = patPath
+                        .replace(".", "\\.")
+                        .replace("**", "___DOUBLE_STAR___")
+                        .replace("*", "[^/]+")
+                        .replace("___DOUBLE_STAR___", ".*")
+                    "^$escaped$"
+                }
+                return globRegex.toRegex(RegexOption.IGNORE_CASE).matches(urlPath)
+            }
+
+            // Otherwise match against urlPatterns ensuring it's not a chapter sub-page
+            val patternMatches = definition.match.urlPatterns.any { pattern ->
+                val regex = pattern
+                    .replace(".", "\\.")
+                    .replace("*", ".*")
+                    .toRegex(RegexOption.IGNORE_CASE)
+                regex.matches(url)
+            }
+            patternMatches
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Fetches novel metadata and chapter list from a novel landing page.
      */
     suspend fun scrapeNovel(
@@ -80,13 +148,23 @@ class SourceDefinitionEngine(
         }
         val status = definition.novel.status?.let { extractValue(doc, it, url) } ?: "ONGOING"
 
+        val scrapedTags = definition.novel.tags?.let { rule ->
+            extractMultipleValues(doc, rule.selector, rule.attribute, rule.transform, url)
+        } ?: emptyList()
+
+        val scrapedWarnings = definition.novel.contentWarnings?.let { rule ->
+            extractMultipleValues(doc, rule.selector, rule.attribute, rule.transform, url)
+        } ?: emptyList()
+
         val novel = ScrapedNovel(
             title = HtmlSanitizer.cleanTitle(rawTitle),
             author = HtmlSanitizer.cleanTitle(rawAuthor),
             description = HtmlSanitizer.cleanHtmlSynopsis(rawDescription),
             coverUrl = coverUrl,
             status = status,
-            sourceUrl = url
+            sourceUrl = url,
+            tags = scrapedTags,
+            contentWarnings = scrapedWarnings
         )
 
         // Extract Chapters
@@ -291,6 +369,42 @@ class SourceDefinitionEngine(
         } catch (e: Exception) {
             relativeUrl
         }
+    }
+
+    fun extractMultipleValues(
+        doc: Document,
+        selector: String,
+        attribute: String?,
+        transform: String?,
+        baseUrl: String
+    ): List<String> {
+        if (selector.isBlank()) return emptyList()
+        val elements = doc.select(selector)
+        val results = mutableListOf<String>()
+        for (el in elements) {
+            var raw = if (attribute.isNullOrBlank() || attribute.equals("text", ignoreCase = true)) {
+                el.text()
+            } else if (attribute.equals("html", ignoreCase = true)) {
+                el.html()
+            } else {
+                el.attr(attribute)
+            }
+            if (transform != null) {
+                raw = when (transform.lowercase()) {
+                    "trim" -> raw.trim()
+                    "lowercase" -> raw.lowercase().trim()
+                    "uppercase" -> raw.uppercase().trim()
+                    "absolute_url" -> resolveAbsoluteUrl(raw, baseUrl)
+                    else -> raw.trim()
+                }
+            } else {
+                raw = raw.trim()
+            }
+            if (raw.isNotBlank()) {
+                results.add(raw)
+            }
+        }
+        return results.distinct()
     }
 
     private fun sha256(input: String): String {

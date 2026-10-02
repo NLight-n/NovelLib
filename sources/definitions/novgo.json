@@ -50,6 +50,11 @@
       "selector": ".m-imgtxt .item span[title='Status'] + .right a, .m-imgtxt .s1.s2 a",
       "type": "text",
       "transform": ["trim"]
+    },
+    "tags": {
+      "selector": ".m-imgtxt .item span[title='Genre'] + .right a, .m-imgtxt .item span.glyphicon-th-list + .right a, a[href*='/genre/']",
+      "attribute": "text",
+      "transform": "trim"
     }
   },
   "chapters": {

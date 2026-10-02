@@ -34,7 +34,7 @@ class LibraryViewModel(
 
     val novels: StateFlow<List<NovelWithEntry>> = activeProfile.flatMapLatest { profile ->
         if (profile != null) {
-            novelRepository.getLibraryNovels(profile.id)
+            novelRepository.getLibraryNovels(profile.id, profile.blockedTags)
         } else {
             flowOf(emptyList())
         }
@@ -121,7 +121,8 @@ class LibraryViewModel(
         newDisplayName: String,
         currentPassword: String? = null,
         newPassword: String? = null,
-        removePassword: Boolean = false
+        removePassword: Boolean = false,
+        blockedTags: List<String>? = null
     ) {
         val current = activeProfile.value ?: return
         viewModelScope.launch {
@@ -131,7 +132,8 @@ class LibraryViewModel(
                 newDisplayName = newDisplayName,
                 currentPassword = currentPassword,
                 newPassword = newPassword,
-                removePassword = removePassword
+                removePassword = removePassword,
+                blockedTags = blockedTags
             )
             if (result.isSuccess) {
                 showEditProfileDialog.value = false

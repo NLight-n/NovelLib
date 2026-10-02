@@ -52,6 +52,12 @@ object SourceDefinitionValidator {
         definition.novel.author?.let { validateSelector("novel.author", it, errors) }
         definition.novel.description?.let { validateSelector("novel.description", it, errors) }
         definition.novel.cover?.let { validateSelector("novel.cover", it, errors) }
+        definition.novel.tags?.let {
+            if (it.selector.isBlank()) errors.add("novel.tags selector cannot be blank")
+        }
+        definition.novel.contentWarnings?.let {
+            if (it.selector.isBlank()) errors.add("novel.contentWarnings selector cannot be blank")
+        }
 
         // 5. Chapters Selectors
         if (definition.chapters.container.isBlank()) {

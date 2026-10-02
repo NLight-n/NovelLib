@@ -36,6 +36,10 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.UUID
 
+import com.drnishanth.novellib.core.database.entities.NovelTagCrossRef
+import com.drnishanth.novellib.core.database.entities.TagEntity
+import com.drnishanth.novellib.core.database.models.NovelWithTags
+
 class NovelRepository(
     private val context: Context,
     private val novelDao: NovelDao,
@@ -52,8 +56,24 @@ class NovelRepository(
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun getLibraryNovels(profileId: String): Flow<List<NovelWithEntry>> {
-        return novelDao.getNovelsForProfile(profileId)
+    fun getLibraryNovels(profileId: String, blockedTags: List<String> = emptyList()): Flow<List<NovelWithEntry>> {
+        return if (blockedTags.isEmpty()) {
+            novelDao.getNovelsForProfile(profileId)
+        } else {
+            novelDao.getNovelsForProfileExcludingTags(
+                profileId = profileId,
+                excludedTagIds = blockedTags,
+                excludedTagNamesLower = blockedTags.map { it.lowercase().trim() }
+            )
+        }
+    }
+
+    fun getNovelWithTags(novelId: String): Flow<NovelWithTags?> {
+        return novelDao.getNovelWithTagsFlow(novelId)
+    }
+
+    fun getTagsForNovel(novelId: String): Flow<List<TagEntity>> {
+        return novelDao.getTagsForNovelFlow(novelId)
     }
 
     suspend fun getNovel(novelId: String): NovelEntity? {
@@ -255,6 +275,33 @@ class NovelRepository(
             }
             chapterDao.insertChapters(chapterEntities)
 
+            // Persist tags and content warnings
+            val tagEntities = mutableListOf<TagEntity>()
+            val crossRefs = mutableListOf<NovelTagCrossRef>()
+
+            for (tag in scrapedNovel.tags) {
+                val cleanTag = HtmlSanitizer.cleanTitle(tag).trim()
+                if (cleanTag.isNotBlank()) {
+                    val tagId = "tag_" + cleanTag.lowercase().replace("[^a-z0-9]+".toRegex(), "_").trim('_')
+                    tagEntities.add(TagEntity(id = tagId, name = cleanTag, isWarning = false))
+                    crossRefs.add(NovelTagCrossRef(novelId = novelId, tagId = tagId))
+                }
+            }
+
+            for (warning in scrapedNovel.contentWarnings) {
+                val cleanWarn = HtmlSanitizer.cleanTitle(warning).trim()
+                if (cleanWarn.isNotBlank()) {
+                    val warnId = "warn_" + cleanWarn.lowercase().replace("[^a-z0-9]+".toRegex(), "_").trim('_')
+                    tagEntities.add(TagEntity(id = warnId, name = cleanWarn, isWarning = true))
+                    crossRefs.add(NovelTagCrossRef(novelId = novelId, tagId = warnId))
+                }
+            }
+
+            if (tagEntities.isNotEmpty()) {
+                novelDao.insertTags(tagEntities)
+                novelDao.insertNovelTagCrossRefs(crossRefs)
+            }
+
             // Add novel to the user's library
             val libraryEntry = LibraryEntryEntity(
                 profileId = profileId,
@@ -327,7 +374,7 @@ class NovelRepository(
         }
     }
 
-    private suspend fun findMatchingDefinition(url: String): SourceDefinition? {
+    suspend fun findMatchingDefinition(url: String): SourceDefinition? {
         // First check custom definitions in Room
         val customDefs = sourceDefinitionDao.getAllDefinitionsDirect()
         for (entity in customDefs) {

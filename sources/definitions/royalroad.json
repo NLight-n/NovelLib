@@ -1,6 +1,6 @@
 {
   "id": "royalroad",
-  "version": 2,
+  "version": 3,
   "name": "Royal Road",
   "description": "Royal Road online web fiction platform",
   "minimum_engine_version": 1,
@@ -12,7 +12,8 @@
     "url_patterns": [
       "https://www.royalroad.com/fiction/*",
       "https://royalroad.com/fiction/*"
-    ]
+    ],
+    "novel_url_pattern": "https://www.royalroad.com/fiction/*"
   },
   "requests": {
     "default": {
@@ -48,6 +49,16 @@
       "selector": ".fiction-info .label",
       "type": "text",
       "transform": ["trim"]
+    },
+    "tags": {
+      "selector": "span.tags a.fiction-tag, span.tags a",
+      "attribute": "text",
+      "transform": "trim"
+    },
+    "contentWarnings": {
+      "selector": ".font-red-sunglo ul.list-inline li, ul.list-inline li",
+      "attribute": "text",
+      "transform": "trim"
     }
   },
   "chapters": {

@@ -62,12 +62,14 @@ fun EditProfileDialog(
         newDisplayName: String,
         currentPassword: String?,
         newPassword: String?,
-        removePassword: Boolean
+        removePassword: Boolean,
+        blockedTags: List<String>
     ) -> Unit,
     onDelete: () -> Unit = {}
 ) {
     var username by remember { mutableStateOf(profile.username) }
     var displayName by remember { mutableStateOf(profile.displayName) }
+    var blockedTagsText by remember { mutableStateOf(profile.blockedTags.joinToString(", ")) }
 
     // If profile currently has password
     var currentPassword by remember { mutableStateOf("") }
@@ -324,6 +326,30 @@ fun EditProfileDialog(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Blocked Tags & Content Restriction Section
+                Text(
+                    text = "Content Filtering & Blocked Tags",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Novels matching these tags or content warnings will be hidden from this profile's library and blocked in the source browser.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                OutlinedTextField(
+                    value = blockedTagsText,
+                    onValueChange = { blockedTagsText = it },
+                    label = { Text("Blocked Tags / Warnings (comma separated)") },
+                    placeholder = { Text("e.g. Graphic Violence, Profanity, Gore, Harem") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 // Error Messages
                 val activeError = localValidationError ?: errorMessage
                 if (activeError != null) {
@@ -365,6 +391,11 @@ fun EditProfileDialog(
                         return@Button
                     }
 
+                    val parsedBlockedTags = blockedTagsText
+                        .split(",")
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+
                     if (profile.passwordEnabled) {
                         if (currentPassword.isBlank()) {
                             localValidationError = "Current password is required"
@@ -372,7 +403,7 @@ fun EditProfileDialog(
                         }
                         when (passwordOption) {
                             PasswordOption.KEEP -> {
-                                onSave(username.trim(), displayName.trim(), currentPassword, null, false)
+                                onSave(username.trim(), displayName.trim(), currentPassword, null, false, parsedBlockedTags)
                             }
                             PasswordOption.CHANGE -> {
                                 if (newPassword.isBlank()) {
@@ -383,10 +414,10 @@ fun EditProfileDialog(
                                     localValidationError = "New passwords do not match"
                                     return@Button
                                 }
-                                onSave(username.trim(), displayName.trim(), currentPassword, newPassword, false)
+                                onSave(username.trim(), displayName.trim(), currentPassword, newPassword, false, parsedBlockedTags)
                             }
                             PasswordOption.REMOVE -> {
-                                onSave(username.trim(), displayName.trim(), currentPassword, null, true)
+                                onSave(username.trim(), displayName.trim(), currentPassword, null, true, parsedBlockedTags)
                             }
                         }
                     } else {
@@ -400,9 +431,9 @@ fun EditProfileDialog(
                                 localValidationError = "Passwords do not match"
                                 return@Button
                             }
-                            onSave(username.trim(), displayName.trim(), null, newPassword, false)
+                            onSave(username.trim(), displayName.trim(), null, newPassword, false, parsedBlockedTags)
                         } else {
-                            onSave(username.trim(), displayName.trim(), null, null, false)
+                            onSave(username.trim(), displayName.trim(), null, null, false, parsedBlockedTags)
                         }
                     }
                 }

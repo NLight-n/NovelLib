@@ -8,11 +8,12 @@ import com.drnishanth.novellib.scraping.models.SanitizeRule
 import com.drnishanth.novellib.scraping.models.SelectorRule
 import com.drnishanth.novellib.scraping.models.SourceDefinition
 import com.drnishanth.novellib.scraping.models.SourceMatch
+import com.drnishanth.novellib.scraping.models.TagSelectorRule
 
 object DefaultSourceDefinitions {
     val ROYAL_ROAD = SourceDefinition(
         id = "royalroad",
-        version = 2,
+        version = 3,
         name = "Royal Road",
         description = "Royal Road online web fiction platform",
         minimumEngineVersion = 1,
@@ -21,7 +22,8 @@ object DefaultSourceDefinitions {
             urlPatterns = listOf(
                 "https://www.royalroad.com/fiction/*",
                 "https://royalroad.com/fiction/*"
-            )
+            ),
+            novelUrlPattern = "https://www.royalroad.com/fiction/*"
         ),
         requests = mapOf(
             "default" to RequestConfig(
@@ -57,6 +59,16 @@ object DefaultSourceDefinitions {
                 selector = ".fiction-info .label",
                 type = "text",
                 transform = listOf("trim")
+            ),
+            tags = TagSelectorRule(
+                selector = "span.tags a.fiction-tag, span.tags a",
+                attribute = "text",
+                transform = "trim"
+            ),
+            contentWarnings = TagSelectorRule(
+                selector = ".font-red-sunglo ul.list-inline li, ul.list-inline li",
+                attribute = "text",
+                transform = "trim"
             )
         ),
         chapters = ChaptersRules(
@@ -185,7 +197,8 @@ object DefaultSourceDefinitions {
                 "https://www.novgo.net/*.html",
                 "https://novgo.net/*",
                 "https://www.novgo.net/*"
-            )
+            ),
+            novelUrlPattern = "https://novgo.net/*.html"
         ),
         requests = mapOf(
             "default" to RequestConfig(
@@ -221,6 +234,11 @@ object DefaultSourceDefinitions {
                 selector = ".m-imgtxt .item span[title='Status'] + .right a, .m-imgtxt .s1.s2 a",
                 type = "text",
                 transform = listOf("trim")
+            ),
+            tags = TagSelectorRule(
+                selector = ".m-imgtxt .item span[title='Genre'] + .right a, .m-imgtxt .item span.glyphicon-th-list + .right a, a[href*='/genre/']",
+                attribute = "text",
+                transform = "trim"
             )
         ),
         chapters = ChaptersRules(

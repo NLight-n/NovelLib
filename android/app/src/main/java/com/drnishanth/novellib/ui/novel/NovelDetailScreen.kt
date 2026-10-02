@@ -11,6 +11,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +23,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -118,6 +122,7 @@ enum class NovelDetailTab(val title: String, val icon: ImageVector) {
 
 @OptIn(
     ExperimentalMaterial3Api::class,
+    ExperimentalLayoutApi::class,
     androidx.compose.foundation.ExperimentalFoundationApi::class
 )
 @Composable
@@ -133,6 +138,7 @@ fun NovelDetailScreen(
     val isAscending by viewModel.isAscending.collectAsState()
     val libraryEntry by viewModel.libraryEntry.collectAsState()
     val downloadStatuses by viewModel.downloadStatuses.collectAsState()
+    val tags by viewModel.tags.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -422,6 +428,58 @@ fun NovelDetailScreen(
                                             StatItem(label = "Read", count = "$readCount", color = Color(0xFF2ECC71))
                                             StatItem(label = "Unread", count = "${chapters.size - readCount}", color = Color(0xFFF39C12))
                                             StatItem(label = "Downloaded", count = "$downloadedCount", color = Color(0xFF3498DB))
+                                        }
+                                    }
+                                }
+
+                                val warnings = tags.filter { it.isWarning }
+                                val normalTags = tags.filter { !it.isWarning }
+
+                                if (warnings.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Text(
+                                        text = "Content Warnings",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        for (w in warnings) {
+                                            SuggestionChip(
+                                                onClick = {},
+                                                label = { Text(w.name, fontSize = 11.sp, color = MaterialTheme.colorScheme.error) },
+                                                colors = SuggestionChipDefaults.suggestionChipColors(
+                                                    containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (normalTags.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = "Tags & Genres",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        for (t in normalTags) {
+                                            SuggestionChip(
+                                                onClick = {},
+                                                label = { Text(t.name, fontSize = 11.sp) }
+                                            )
                                         }
                                     }
                                 }

@@ -174,14 +174,15 @@ fun ProfilePickerScreen(
                     canDelete = profiles.size > 1,
                     errorMessage = uiState.errorMessage,
                     onDismiss = { viewModel.dismissEditProfileDialog() },
-                    onSave = { newUsername, newDisplayName, currentPass, newPass, removePass ->
+                    onSave = { newUsername, newDisplayName, currentPass, newPass, removePass, blockedTags ->
                         viewModel.updateProfile(
                             profileId = profileToEdit.id,
                             newUsername = newUsername,
                             newDisplayName = newDisplayName,
                             currentPassword = currentPass,
                             newPassword = newPass,
-                            removePassword = removePass
+                            removePassword = removePass,
+                            blockedTags = blockedTags
                         )
                     },
                     onDelete = {

@@ -71,6 +71,9 @@ fun NovelNavGraph(
                 },
                 onOpenSync = {
                     navController.navigate(Screen.Sync.route)
+                },
+                onOpenBrowser = { url ->
+                    navController.navigate(Screen.SourceBrowser.createRoute(url))
                 }
             )
         }
@@ -79,6 +82,32 @@ fun NovelNavGraph(
             val sourcesVm: SourcesViewModel = viewModel()
             SourcesScreen(
                 viewModel = sourcesVm,
+                onBack = { navController.popBackStack() },
+                onOpenBrowser = { url ->
+                    navController.navigate(Screen.SourceBrowser.createRoute(url))
+                }
+            )
+        }
+
+        composable(
+            route = Screen.SourceBrowser.route,
+            arguments = listOf(
+                navArgument("url") {
+                    type = NavType.StringType
+                    defaultValue = "https://www.royalroad.com"
+                }
+            )
+        ) { backStackEntry ->
+            val rawUrl = backStackEntry.arguments?.getString("url") ?: "https://www.royalroad.com"
+            val url = try {
+                java.net.URLDecoder.decode(rawUrl, "UTF-8")
+            } catch (_: Exception) {
+                rawUrl
+            }
+            val browserVm = viewModel<com.drnishanth.novellib.ui.browser.SourceBrowserViewModel>()
+            com.drnishanth.novellib.ui.browser.SourceBrowserScreen(
+                initialUrl = url,
+                viewModel = browserVm,
                 onBack = { navController.popBackStack() }
             )
         }

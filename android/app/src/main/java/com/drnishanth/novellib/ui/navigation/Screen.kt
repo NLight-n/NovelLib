@@ -11,4 +11,10 @@ sealed class Screen(val route: String) {
     }
     data object Sources : Screen("sources")
     data object Sync : Screen("sync")
+    data object SourceBrowser : Screen("browser?url={url}") {
+        fun createRoute(url: String = "https://www.royalroad.com"): String {
+            val encoded = java.net.URLEncoder.encode(url, "UTF-8")
+            return "browser?url=$encoded"
+        }
+    }
 }

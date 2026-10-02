@@ -22,7 +22,9 @@ data class SourceDefinition(
 data class SourceMatch(
     val hosts: List<String> = emptyList(),
     @SerialName("url_patterns")
-    val urlPatterns: List<String> = emptyList()
+    val urlPatterns: List<String> = emptyList(),
+    @SerialName("novel_url_pattern")
+    val novelUrlPattern: String? = null
 )
 
 @Serializable
@@ -45,12 +47,22 @@ data class SelectorRule(
 )
 
 @Serializable
+data class TagSelectorRule(
+    val selector: String,
+    val attribute: String? = null,
+    val transform: String? = null
+)
+
+@Serializable
 data class NovelRules(
     val title: SelectorRule,
     val author: SelectorRule? = null,
     val description: SelectorRule? = null,
     val cover: SelectorRule? = null,
-    val status: SelectorRule? = null
+    val status: SelectorRule? = null,
+    val tags: TagSelectorRule? = null,
+    @SerialName("contentWarnings")
+    val contentWarnings: TagSelectorRule? = null
 )
 
 @Serializable
@@ -83,7 +95,9 @@ data class ScrapedNovel(
     val description: String,
     val coverUrl: String?,
     val status: String,
-    val sourceUrl: String
+    val sourceUrl: String,
+    val tags: List<String> = emptyList(),
+    val contentWarnings: List<String> = emptyList()
 )
 
 data class ScrapedChapterItem(
