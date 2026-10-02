@@ -162,5 +162,27 @@ class SourceDefinitionEngineTest {
         assertNotNull(novgo.match.novelUrlPattern)
         assertNotNull(novgo.novel.tags)
         assertTrue(novgo.novel.tags?.selector?.contains(".m-imgtxt .item span[title='Genre'] + .right a") == true)
+
+        val sh = DefaultSourceDefinitions.SCRIBBLE_HUB
+        assertNotNull(sh.match.novelUrlPattern)
+        assertNotNull(sh.novel.tags)
+        assertNotNull(sh.novel.contentWarnings)
+        assertTrue(engine.matchesNovelUrl("https://www.scribblehub.com/series/104322/tree-of-aeons/", sh))
+
+        val litfic = DefaultSourceDefinitions.LITFIC
+        assertNotNull(litfic.match.novelUrlPattern)
+        assertNotNull(litfic.novel.tags)
+        assertTrue(engine.matches("https://litfic.com/browse", litfic))
+        assertTrue(engine.matchesNovelUrl("https://litfic.com/series/sample-series", litfic))
+
+        val tapas = DefaultSourceDefinitions.TAPAS
+        assertNotNull(tapas.match.novelUrlPattern)
+        assertNotNull(tapas.novel.tags)
+        assertTrue(engine.matchesNovelUrl("https://tapas.io/series/the-beginning-after-the-end", tapas))
+
+        val nu = DefaultSourceDefinitions.NOVEL_UPDATES
+        assertNotNull(nu.match.novelUrlPattern)
+        assertNotNull(nu.novel.tags)
+        assertTrue(engine.matchesNovelUrl("https://www.novelupdates.com/series/trash-of-the-counts-family/", nu))
     }
 }

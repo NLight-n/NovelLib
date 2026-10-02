@@ -27,6 +27,24 @@ class SourceDefinitionValidatorTest {
     }
 
     @Test
+    fun testValidLitFicDefinition() {
+        val result = SourceDefinitionValidator.validate(DefaultSourceDefinitions.LITFIC)
+        assertTrue("LitFic definition should be valid", result is SourceDefinitionValidator.ValidationResult.Valid)
+    }
+
+    @Test
+    fun testValidTapasDefinition() {
+        val result = SourceDefinitionValidator.validate(DefaultSourceDefinitions.TAPAS)
+        assertTrue("Tapas definition should be valid", result is SourceDefinitionValidator.ValidationResult.Valid)
+    }
+
+    @Test
+    fun testValidNovelUpdatesDefinition() {
+        val result = SourceDefinitionValidator.validate(DefaultSourceDefinitions.NOVEL_UPDATES)
+        assertTrue("Novel Updates definition should be valid", result is SourceDefinitionValidator.ValidationResult.Valid)
+    }
+
+    @Test
     fun testRejectIncompatibleEngineVersion() {
         val futureDef = DefaultSourceDefinitions.ROYAL_ROAD.copy(minimumEngineVersion = 99)
         val result = SourceDefinitionValidator.validate(futureDef)

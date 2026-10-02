@@ -44,6 +44,8 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -64,9 +66,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.SubcomposeAsyncImage
 import com.drnishanth.novellib.core.database.dao.NovelWithEntry
 import com.drnishanth.novellib.ui.profiles.EditProfileDialog
+import com.drnishanth.novellib.ui.sources.SourcesContent
+import com.drnishanth.novellib.ui.sources.SourcesViewModel
+
+enum class HomeTab {
+    LIBRARY,
+    SOURCES
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,6 +95,10 @@ fun LibraryScreen(
     val editProfileError by viewModel.editProfileError.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var novelPendingRemoval by remember { mutableStateOf<NovelWithEntry?>(null) }
+    var currentTab by remember { mutableStateOf(HomeTab.LIBRARY) }
+
+    val sourcesVm: SourcesViewModel = viewModel()
+    val sourcesUiState by sourcesVm.uiState.collectAsState()
 
     LaunchedEffect(uiState.importSuccessMessage) {
         uiState.importSuccessMessage?.let { msg ->
@@ -93,58 +107,87 @@ fun LibraryScreen(
         }
     }
 
+    LaunchedEffect(sourcesUiState.message, sourcesUiState.errorMessage) {
+        sourcesUiState.message?.let {
+            snackbarHostState.showSnackbar(it)
+            sourcesVm.clearMessages()
+        }
+        sourcesUiState.errorMessage?.let {
+            snackbarHostState.showSnackbar("Error: $it")
+            sourcesVm.clearMessages()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            text = "Novel Library",
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                        activeProfile?.let { profile ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable { viewModel.openEditProfile() }
-                                    .padding(vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "Hi @${profile.username}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Default.Edit,
-                                    contentDescription = "Edit Profile",
-                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(12.dp)
-                                )
+                    if (currentTab == HomeTab.LIBRARY) {
+                        Column {
+                            Text(
+                                text = "Novel Library",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            activeProfile?.let { profile ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { viewModel.openEditProfile() }
+                                        .padding(vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Hi @${profile.username}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit Profile",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                }
                             }
                         }
+                    } else {
+                        Text(
+                            text = "Website Sources",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { viewModel.checkAllUpdates() },
-                        enabled = !uiState.isRefreshing
-                    ) {
-                        if (uiState.isRefreshing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.Refresh, contentDescription = "Check All Updates")
+                    if (currentTab == HomeTab.LIBRARY) {
+                        IconButton(
+                            onClick = { viewModel.checkAllUpdates() },
+                            enabled = !uiState.isRefreshing
+                        ) {
+                            if (uiState.isRefreshing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = "Check All Updates")
+                            }
                         }
-                    }
-                    IconButton(onClick = { onOpenBrowser("https://www.royalroad.com") }) {
-                        Icon(Icons.Default.Public, contentDescription = "Browse Sources")
-                    }
-                    IconButton(onClick = onOpenSources) {
-                        Icon(Icons.Default.CloudDownload, contentDescription = "Manage Sources")
+                    } else {
+                        IconButton(
+                            onClick = { sourcesVm.checkForUpdates() },
+                            enabled = !sourcesUiState.isCheckingUpdates
+                        ) {
+                            if (sourcesUiState.isCheckingUpdates) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = "Check for Updates")
+                            }
+                        }
                     }
                     IconButton(onClick = onOpenSync) {
                         Icon(Icons.Default.Sync, contentDescription = "Sync Devices")
@@ -158,9 +201,27 @@ fun LibraryScreen(
                 }
             )
         },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = currentTab == HomeTab.LIBRARY,
+                    onClick = { currentTab = HomeTab.LIBRARY },
+                    icon = { Icon(Icons.Default.Book, contentDescription = "Library") },
+                    label = { Text("Library") }
+                )
+                NavigationBarItem(
+                    selected = currentTab == HomeTab.SOURCES,
+                    onClick = { currentTab = HomeTab.SOURCES },
+                    icon = { Icon(Icons.Default.Public, contentDescription = "Sources") },
+                    label = { Text("Sources") }
+                )
+            }
+        },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.showAddNovelDialog() }) {
-                Icon(Icons.Default.Add, contentDescription = "Add Novel")
+            if (currentTab == HomeTab.LIBRARY) {
+                FloatingActionButton(onClick = { viewModel.showAddNovelDialog() }) {
+                    Icon(Icons.Default.Add, contentDescription = "Add Novel")
+                }
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
@@ -170,59 +231,67 @@ fun LibraryScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (novels.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        Icons.Default.Book,
-                        contentDescription = null,
-                        modifier = Modifier.size(72.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        "Your library is empty",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "Explore web fiction catalogs or add novel URLs directly to your library.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { viewModel.showAddNovelDialog() }) {
-                        Text("Add Novel by URL")
+            if (currentTab == HomeTab.LIBRARY) {
+                if (novels.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Book,
+                            contentDescription = null,
+                            modifier = Modifier.size(72.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            "Your library is empty",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "Explore web fiction catalogs or add novel URLs directly to your library.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { viewModel.showAddNovelDialog() }) {
+                            Text("Add Novel by URL")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedButton(onClick = { currentTab = HomeTab.SOURCES }) {
+                            Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Browse Sources")
+                        }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(onClick = { onOpenBrowser("https://www.royalroad.com") }) {
-                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Explore Sources in App")
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(3),
+                        contentPadding = PaddingValues(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(novels) { novel ->
+                            NovelGridCard(
+                                novel = novel,
+                                onClick = { onNovelSelected(novel.id) },
+                                onDelete = { novelPendingRemoval = novel }
+                            )
+                        }
                     }
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 160.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                SourcesContent(
+                    viewModel = sourcesVm,
+                    onOpenBrowser = onOpenBrowser,
                     modifier = Modifier.fillMaxSize()
-                ) {
-                    items(novels) { novel ->
-                        NovelGridCard(
-                            novel = novel,
-                            onClick = { onNovelSelected(novel.id) },
-                            onDelete = { novelPendingRemoval = novel }
-                        )
-                    }
-                }
+                )
             }
 
             if (uiState.showAddDialog) {
@@ -308,16 +377,16 @@ fun NovelGridCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Column(modifier = Modifier.padding(6.dp)) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(0.68f)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(6.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -329,7 +398,7 @@ fun NovelGridCard(
                         modifier = Modifier.fillMaxSize(),
                         loading = {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             }
                         },
                         error = {
@@ -337,7 +406,7 @@ fun NovelGridCard(
                                 Icon(
                                     Icons.Default.Book,
                                     contentDescription = null,
-                                    modifier = Modifier.size(48.dp),
+                                    modifier = Modifier.size(36.dp),
                                     tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                                 )
                             }
@@ -347,7 +416,7 @@ fun NovelGridCard(
                     Icon(
                         Icons.Default.Book,
                         contentDescription = null,
-                        modifier = Modifier.size(48.dp),
+                        modifier = Modifier.size(36.dp),
                         tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                     )
                 }
@@ -356,26 +425,27 @@ fun NovelGridCard(
                     onClick = onDelete,
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(4.dp)
-                        .size(28.dp)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.75f), CircleShape)
+                        .padding(2.dp)
+                        .size(24.dp)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), CircleShape)
                 ) {
                     Icon(
                         Icons.Default.DeleteOutline,
                         contentDescription = "Remove from Library",
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = novel.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.titleSmall,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                lineHeight = 15.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
@@ -385,6 +455,7 @@ fun NovelGridCard(
             Text(
                 text = novel.author,
                 style = MaterialTheme.typography.bodySmall,
+                fontSize = 10.sp,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

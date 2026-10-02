@@ -1,5 +1,6 @@
 package com.drnishanth.novellib.ui.sources
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,10 +53,9 @@ import androidx.compose.material.icons.filled.Public
 @Composable
 fun SourcesScreen(
     viewModel: SourcesViewModel,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)? = null,
     onOpenBrowser: (String) -> Unit = {}
 ) {
-    val installed by viewModel.installedDefinitions.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -73,18 +73,15 @@ fun SourcesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Website Sources & Registry") },
+                title = { Text("Website Sources") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
                     }
                 },
                 actions = {
-                    IconButton(
-                        onClick = { onOpenBrowser("https://www.royalroad.com") }
-                    ) {
-                        Icon(Icons.Default.Public, contentDescription = "Open In-App Browser")
-                    }
                     IconButton(
                         onClick = { viewModel.checkForUpdates() },
                         enabled = !uiState.isCheckingUpdates
@@ -100,87 +97,112 @@ fun SourcesScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        Box(
+        SourcesContent(
+            viewModel = viewModel,
+            onOpenBrowser = onOpenBrowser,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-        ) {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        )
+    }
+}
+
+@Composable
+fun SourcesContent(
+    viewModel: SourcesViewModel,
+    onOpenBrowser: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val installed by viewModel.installedDefinitions.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
+
+    LazyColumn(
+        modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            // Registry Source Info Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
             ) {
-                item {
-                    // Registry Source Info Card
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant
-                        )
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "GitHub Remote Registry",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = uiState.registryUrl,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = { viewModel.checkForUpdates() },
+                        enabled = !uiState.isCheckingUpdates,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                text = "GitHub Remote Registry",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = uiState.registryUrl,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
-                            )
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Button(
-                                onClick = { viewModel.checkForUpdates() },
-                                enabled = !uiState.isCheckingUpdates,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(Icons.Default.CloudDownload, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(if (uiState.isCheckingUpdates) "Checking..." else "Check for Updates")
-                            }
-                        }
+                        Icon(Icons.Default.CloudDownload, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(if (uiState.isCheckingUpdates) "Checking for updates..." else "Check for Updates")
                     }
                 }
-
-                item {
-                    Text(
-                        text = "Installed Sources (${installed.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
-
-                items(installed) { definition ->
-                    val updateStatus = uiState.updateStatuses.firstOrNull { it.sourceId == definition.id }
-                    SourceItemCard(
-                        definition = definition,
-                        updateStatus = updateStatus,
-                        isUpdating = uiState.isUpdatingSourceId == definition.id,
-                        onBrowse = { onOpenBrowser(resolveBrowseUrl(definition)) },
-                        onUpdate = { viewModel.updateSource(definition.id) },
-                        onRollback = { viewModel.rollbackSource(definition.id) },
-                        onToggleEnabled = { viewModel.toggleSourceEnabled(definition.id, definition.enabled) }
-                    )
-                }
             }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Installed Sources (${installed.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Text(
+                    text = "Tap card to browse",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        items(installed) { definition ->
+            val updateStatus = uiState.updateStatuses.firstOrNull { it.sourceId == definition.id }
+            SourceItemCard(
+                definition = definition,
+                updateStatus = updateStatus,
+                isUpdating = uiState.isUpdatingSourceId == definition.id,
+                onBrowse = { onOpenBrowser(resolveBrowseUrl(definition)) },
+                onUpdate = { viewModel.updateSource(definition.id) },
+                onRollback = { viewModel.rollbackSource(definition.id) },
+                onToggleEnabled = { viewModel.toggleSourceEnabled(definition.id, definition.enabled) }
+            )
         }
     }
 }
 
-private fun resolveBrowseUrl(definition: SourceDefinitionEntity): String {
-    return when (definition.id) {
+fun resolveBrowseUrl(definition: SourceDefinitionEntity): String {
+    return when (definition.id.lowercase()) {
         "royalroad" -> "https://www.royalroad.com"
         "novgo" -> "https://novgo.net"
         "scribblehub" -> "https://www.scribblehub.com"
+        "litfic" -> "https://litfic.com/browse"
+        "tapas" -> "https://tapas.io"
+        "novelupdates" -> "https://www.novelupdates.com"
         else -> {
             try {
                 val json = org.json.JSONObject(definition.jsonContent)
-                val domains = json.getJSONObject("match").getJSONArray("domains")
-                if (domains.length() > 0) "https://${domains.getString(0)}" else "https://www.royalroad.com"
+                val match = json.getJSONObject("match")
+                val hosts = match.optJSONArray("hosts")
+                if (hosts != null && hosts.length() > 0) "https://${hosts.getString(0)}" else "https://www.royalroad.com"
             } catch (_: Exception) {
                 "https://www.royalroad.com"
             }
@@ -199,7 +221,9 @@ fun SourceItemCard(
     onToggleEnabled: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onBrowse),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),

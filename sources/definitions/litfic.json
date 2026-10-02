@@ -1,21 +1,21 @@
 {
-  "id": "scribblehub",
-  "version": 2,
-  "name": "Scribble Hub",
-  "description": "Original web stories, community fiction, and serialized light novels",
+  "id": "litfic",
+  "version": 1,
+  "name": "LitFic",
+  "description": "Serialized modern fiction, web novels, and original community stories",
   "minimum_engine_version": 1,
   "match": {
     "hosts": [
-      "scribblehub.com",
-      "www.scribblehub.com"
+      "litfic.com",
+      "www.litfic.com"
     ],
     "url_patterns": [
-      "https://www.scribblehub.com/series/*",
-      "https://scribblehub.com/series/*",
-      "https://www.scribblehub.com/read/*",
-      "https://scribblehub.com/read/*"
+      "https://litfic.com/series/*",
+      "https://www.litfic.com/series/*",
+      "https://litfic.com/browse*",
+      "https://www.litfic.com/browse*"
     ],
-    "novel_url_pattern": "https://www.scribblehub.com/series/*"
+    "novel_url_pattern": "https://litfic.com/series/*"
   },
   "requests": {
     "default": {
@@ -27,64 +27,59 @@
   },
   "novel": {
     "title": {
-      "selector": "h1.fic_title, .fic_title",
+      "selector": "h1, .font-display",
       "type": "text",
       "transform": ["trim"]
     },
     "author": {
-      "selector": "span.auth_name_fic a, span.auth_name_fic",
+      "selector": "a[href*='/profile/'], a[href*='/author/'], .text-flame",
       "type": "text",
       "transform": ["trim"]
     },
     "description": {
-      "selector": ".wi_fic_desc, .fic_desc",
+      "selector": ".prose, .reader-content, p",
       "type": "html",
       "transform": ["trim"]
     },
     "cover": {
-      "selector": ".fic_image img",
+      "selector": "img[src*='covers'], img[src*='firebasestorage'], .relative img, img",
       "type": "attribute",
       "attribute": "src",
       "transform": ["absolute_url"]
     },
     "status": {
-      "selector": "span.rnd_status",
+      "selector": ".badge, span[class*='status']",
       "type": "text",
       "transform": ["trim"]
     },
     "tags": {
-      "selector": ".fic_genre, .fic_genre a, .stag, .stag a, a.stag",
+      "selector": "a[href*='/browse?'], a[href*='/genres/'], .badge, span.tag",
       "attribute": "text",
       "transform": "trim"
     },
     "content_warnings": {
-      "selector": ".raw_warning, .raw_warning a, .content_warning a, .warning_list li",
+      "selector": "span[class*='warning'], .text-red-500",
       "attribute": "text",
       "transform": "trim"
     }
   },
   "chapters": {
-    "container": "ul.toc_w li.toc_li, .toc_li, ul.toc_w li",
+    "container": "a[href*='/series/'], div a[href*='/series/']",
     "title": {
-      "selector": "a.toc_a, a",
+      "selector": "span, p, a",
       "type": "text",
       "transform": ["trim"]
     },
     "url": {
-      "selector": "a.toc_a, a",
+      "selector": "a, this",
       "type": "attribute",
       "attribute": "href",
       "transform": ["absolute_url"]
-    },
-    "published_at": {
-      "selector": "span.fic_date_pub",
-      "type": "text",
-      "transform": ["trim"]
     }
   },
   "chapter": {
     "content": {
-      "selector": "div.chp_raw, .chp_raw, #chp_raw",
+      "selector": "div.reader-content, article, div[class*='reader']",
       "type": "html"
     },
     "sanitize": {
