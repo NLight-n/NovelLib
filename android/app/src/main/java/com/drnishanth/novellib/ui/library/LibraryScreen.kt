@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -302,7 +303,7 @@ fun NovelGridCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .aspectRatio(0.68f)
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center

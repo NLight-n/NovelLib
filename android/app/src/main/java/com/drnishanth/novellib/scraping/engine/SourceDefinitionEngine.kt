@@ -67,7 +67,17 @@ class SourceDefinitionEngine(
             ?: throw IllegalStateException("Novel title could not be extracted from $url")
         val rawAuthor = definition.novel.author?.let { extractValue(doc, it, url) } ?: "Unknown"
         val rawDescription = definition.novel.description?.let { extractValue(doc, it, url) } ?: ""
-        val coverUrl = definition.novel.cover?.let { extractValue(doc, it, url) }
+        val rawCoverUrl = definition.novel.cover?.let { extractValue(doc, it, url) }
+        val coverUrl = if (!rawCoverUrl.isNullOrBlank()) {
+            rawCoverUrl
+        } else {
+            val og = doc.selectFirst("meta[property='og:image'], meta[name='twitter:image'], meta[property='twitter:image']")?.attr("content")?.trim()
+            if (!og.isNullOrBlank()) {
+                resolveAbsoluteUrl(og, url)
+            } else {
+                null
+            }
+        }
         val status = definition.novel.status?.let { extractValue(doc, it, url) } ?: "ONGOING"
 
         val novel = ScrapedNovel(

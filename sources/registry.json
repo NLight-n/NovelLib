@@ -1,15 +1,15 @@
 {
-  "version": 4,
-  "updated_at": 1727712000000,
+  "version": 5,
+  "updated_at": 1727800000000,
   "sources": [
     {
       "id": "royalroad",
-      "version": 1,
+      "version": 2,
       "name": "Royal Road",
       "description": "Royal Road online web fiction platform",
       "minimum_engine_version": 1,
       "relative_path": "definitions/royalroad.json",
-      "checksum": "sha256:a481a80e0372ccc0df5b71aab1ceffd4bdf94c909b51158f10e657caa28c9e4d"
+      "checksum": "sha256:e1d006fe9dd5eb1589990e1c174d8b4e3f0921ec4c3774f829a316c39eef29b4"
     },
     {
       "id": "scribblehub",

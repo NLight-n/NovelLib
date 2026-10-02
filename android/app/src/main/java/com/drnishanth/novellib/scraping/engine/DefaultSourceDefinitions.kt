@@ -12,7 +12,7 @@ import com.drnishanth.novellib.scraping.models.SourceMatch
 object DefaultSourceDefinitions {
     val ROYAL_ROAD = SourceDefinition(
         id = "royalroad",
-        version = 1,
+        version = 2,
         name = "Royal Road",
         description = "Royal Road online web fiction platform",
         minimumEngineVersion = 1,
@@ -48,7 +48,7 @@ object DefaultSourceDefinitions {
                 transform = listOf("trim")
             ),
             cover = SelectorRule(
-                selector = ".fiche-header img",
+                selector = "img[data-type='cover'], .cover-art-container img, .cover-col img, .thumbnail[data-type='cover'], img.thumbnail",
                 type = "attribute",
                 attribute = "src",
                 transform = listOf("absolute_url")

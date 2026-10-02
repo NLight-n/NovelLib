@@ -32,11 +32,15 @@ data class NovelDetailUiState(
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class NovelDetailViewModel(
-    private val novelId: String,
+    val novelId: String,
     private val novelRepository: NovelRepository = NovelLibApplication.instance.novelRepository,
     private val profileRepository: ProfileRepository = NovelLibApplication.instance.profileRepository,
     private val downloadManager: DownloadManager = NovelLibApplication.instance.downloadManager
 ) : ViewModel() {
+
+    private val prefs by lazy {
+        NovelLibApplication.instance.getSharedPreferences("novel_prefs", android.content.Context.MODE_PRIVATE)
+    }
 
     private val _novel = MutableStateFlow<NovelEntity?>(null)
     val novel: StateFlow<NovelEntity?> = _novel.asStateFlow()
@@ -47,7 +51,9 @@ class NovelDetailViewModel(
     private val _uiState = MutableStateFlow(NovelDetailUiState())
     val uiState: StateFlow<NovelDetailUiState> = _uiState.asStateFlow()
 
-    private val _isAscending = MutableStateFlow(true)
+    private val _isAscending = MutableStateFlow(
+        prefs.getBoolean("novel_sort_order_$novelId", prefs.getBoolean("pref_global_chapter_sort", true))
+    )
     val isAscending: StateFlow<Boolean> = _isAscending.asStateFlow()
 
     val chapters: StateFlow<List<ChapterEntity>> = novelRepository.getChapters(novelId)
@@ -72,7 +78,12 @@ class NovelDetailViewModel(
     val downloadStatuses: StateFlow<Map<String, ChapterDownloadStatus>> = downloadManager.downloadStatuses
 
     fun toggleSortOrder() {
-        _isAscending.value = !_isAscending.value
+        val next = !_isAscending.value
+        _isAscending.value = next
+        prefs.edit()
+            .putBoolean("novel_sort_order_$novelId", next)
+            .putBoolean("pref_global_chapter_sort", next)
+            .apply()
     }
 
     fun toggleChapterRead(chapterId: String, currentRead: Boolean) {
