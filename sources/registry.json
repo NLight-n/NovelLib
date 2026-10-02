@@ -1,6 +1,6 @@
 {
-  "version": 7,
-  "updated_at": 1727878000000,
+  "version": 8,
+  "updated_at": 1727879000000,
   "sources": [
     {
       "id": "royalroad",
@@ -31,12 +31,12 @@
     },
     {
       "id": "litfic",
-      "version": 1,
+      "version": 2,
       "name": "LitFic",
       "description": "Serialized modern fiction, web novels, and original community stories",
       "minimum_engine_version": 1,
       "relative_path": "definitions/litfic.json",
-      "checksum": "sha256:f1176397044169c9c62c23e715017f024fdb5ebc373d61a750e04fe25d8ec3ee"
+      "checksum": "sha256:3977dc8258cc84acee4758eaa5910258522eb6544ff6ff8bb613a8b9656a6262"
     },
     {
       "id": "tapas",

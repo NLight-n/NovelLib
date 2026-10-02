@@ -223,7 +223,7 @@ fun SourceBrowserScreen(
                 } else {
                     // Ingest Novel Action Button
                     ExtendedFloatingActionButton(
-                        onClick = { viewModel.importCurrentNovel() },
+                        onClick = { viewModel.importCurrentNovel(webViewRef) },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
@@ -303,6 +303,20 @@ fun SourceBrowserScreen(
                         cm.setAcceptCookie(true)
                         cm.setAcceptThirdPartyCookies(this, true)
 
+                        addJavascriptInterface(
+                            object {
+                                @android.webkit.JavascriptInterface
+                                fun onUrlChange(newUrl: String?, pageTitle: String?) {
+                                    if (!newUrl.isNullOrBlank()) {
+                                        post {
+                                            viewModel.onPageFinished(newUrl, pageTitle, this@apply)
+                                        }
+                                    }
+                                }
+                            },
+                            "NovelLibBridge"
+                        )
+
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(
                                 view: WebView?,
@@ -336,11 +350,43 @@ fun SourceBrowserScreen(
                                 url?.let {
                                     viewModel.onPageFinished(it, view?.title, view)
                                 }
+                                // Hook client-side SPA history navigation (Next.js, React, etc.)
+                                val hookJs = """
+                                    (function() {
+                                        if (window.__novelLibNavHooked) return;
+                                        window.__novelLibNavHooked = true;
+                                        function notifyNav() {
+                                            try {
+                                                if (window.NovelLibBridge && window.NovelLibBridge.onUrlChange) {
+                                                    window.NovelLibBridge.onUrlChange(window.location.href, document.title);
+                                                }
+                                            } catch(e) {}
+                                        }
+                                        var pushState = history.pushState;
+                                        history.pushState = function() {
+                                            var ret = pushState.apply(this, arguments);
+                                            notifyNav();
+                                            return ret;
+                                        };
+                                        var replaceState = history.replaceState;
+                                        history.replaceState = function() {
+                                            var ret = replaceState.apply(this, arguments);
+                                            notifyNav();
+                                            return ret;
+                                        };
+                                        window.addEventListener('popstate', notifyNav);
+                                    })();
+                                """.trimIndent()
+                                view?.evaluateJavascript(hookJs, null)
                             }
 
                             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                                 super.doUpdateVisitedHistory(view, url, isReload)
                                 canGoBack = view?.canGoBack() == true
+                                val effectiveUrl = url ?: view?.url
+                                if (!effectiveUrl.isNullOrBlank()) {
+                                    viewModel.onPageFinished(effectiveUrl, view?.title, view)
+                                }
                             }
                         }
 

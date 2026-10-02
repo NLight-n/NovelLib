@@ -1,6 +1,6 @@
 {
   "id": "litfic",
-  "version": 1,
+  "version": 2,
   "name": "LitFic",
   "description": "Serialized modern fiction, web novels, and original community stories",
   "minimum_engine_version": 1,
@@ -27,7 +27,7 @@
   },
   "novel": {
     "title": {
-      "selector": "h1, .font-display",
+      "selector": "main h1, h1, meta[property='og:title']",
       "type": "text",
       "transform": ["trim"]
     },

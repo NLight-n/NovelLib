@@ -212,7 +212,11 @@ class NovelRepository(
      * Resolves matching source definition and scrapes novel details + chapter index,
      * persisting them to Room and linking to the current user profile.
      */
-    suspend fun importNovelFromUrl(url: String, profileId: String): Result<NovelEntity> = withContext(Dispatchers.IO) {
+    suspend fun importNovelFromUrl(
+        url: String,
+        profileId: String,
+        preloadedHtml: String? = null
+    ): Result<NovelEntity> = withContext(Dispatchers.IO) {
         try {
             val definition = findMatchingDefinition(url)
                 ?: return@withContext Result.failure(
@@ -220,7 +224,7 @@ class NovelRepository(
                 )
 
             // Scrape novel info & chapters using the declarative engine
-            val (scrapedNovel, scrapedChapters) = scraperEngine.scrapeNovel(url, definition)
+            val (scrapedNovel, scrapedChapters) = scraperEngine.scrapeNovel(url, definition, preloadedHtml)
 
             // Check if source already exists
             val existingSource = novelDao.getSourceByUrl(url)

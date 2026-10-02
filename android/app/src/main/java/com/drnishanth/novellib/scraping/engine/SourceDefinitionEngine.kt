@@ -126,9 +126,14 @@ class SourceDefinitionEngine(
      */
     suspend fun scrapeNovel(
         url: String,
-        definition: SourceDefinition
+        definition: SourceDefinition,
+        preloadedHtml: String? = null
     ): Pair<ScrapedNovel, List<ScrapedChapterItem>> = withContext(Dispatchers.IO) {
-        val doc = fetchDocument(url, definition.requests["default"])
+        val doc = if (!preloadedHtml.isNullOrBlank()) {
+            Jsoup.parse(preloadedHtml, url)
+        } else {
+            fetchDocument(url, definition.requests["default"])
+        }
 
         // Extract Novel metadata
         val rawTitle = extractValue(doc, definition.novel.title, url)
@@ -260,9 +265,14 @@ class SourceDefinitionEngine(
      */
     suspend fun scrapeChapterContent(
         url: String,
-        definition: SourceDefinition
+        definition: SourceDefinition,
+        preloadedHtml: String? = null
     ): ScrapedChapterContent = withContext(Dispatchers.IO) {
-        val doc = fetchDocument(url, definition.requests["default"])
+        val doc = if (!preloadedHtml.isNullOrBlank()) {
+            Jsoup.parse(preloadedHtml, url)
+        } else {
+            fetchDocument(url, definition.requests["default"])
+        }
         val rawHtml = extractValue(doc, definition.chapter.content, url)
             ?: throw IllegalStateException("Chapter content could not be extracted from $url")
 
@@ -279,18 +289,72 @@ class SourceDefinitionEngine(
     private suspend fun fetchDocument(url: String, requestConfig: RequestConfig?): Document {
         val requestBuilder = Request.Builder().url(url)
         val headers = requestConfig?.headers ?: emptyMap()
+
+        // Realistic browser headers
         if (!headers.containsKey("User-Agent")) {
             requestBuilder.header(
                 "User-Agent",
                 "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
             )
         }
+        if (!headers.containsKey("Accept")) {
+            requestBuilder.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+        }
+        if (!headers.containsKey("Accept-Language")) {
+            requestBuilder.header("Accept-Language", "en-US,en;q=0.9")
+        }
+        if (!headers.containsKey("Sec-Fetch-Dest")) {
+            requestBuilder.header("Sec-Fetch-Dest", "document")
+        }
+        if (!headers.containsKey("Sec-Fetch-Mode")) {
+            requestBuilder.header("Sec-Fetch-Mode", "navigate")
+        }
+        if (!headers.containsKey("Sec-Fetch-Site")) {
+            requestBuilder.header("Sec-Fetch-Site", "none")
+        }
+        if (!headers.containsKey("Upgrade-Insecure-Requests")) {
+            requestBuilder.header("Upgrade-Insecure-Requests", "1")
+        }
+
+        // Attach cookies from Android CookieManager if available
+        try {
+            val cm = android.webkit.CookieManager.getInstance()
+            cm.flush()
+            val cookieStr = cm.getCookie(url)
+            if (!cookieStr.isNullOrBlank() && !headers.containsKey("Cookie")) {
+                requestBuilder.header("Cookie", cookieStr)
+            }
+        } catch (_: Exception) {}
+
         headers.forEach { (k, v) -> requestBuilder.header(k, v) }
 
         val request = requestBuilder.build()
-        val response = client.newCall(request).execute()
+        val response = try {
+            client.newCall(request).execute()
+        } catch (e: Exception) {
+            val context = try { com.drnishanth.novellib.NovelLibApplication.instance } catch (_: Exception) { null }
+            if (context != null) {
+                val fallbackDoc = WebViewDocumentFetcher.fetchDocument(context, url)
+                if (fallbackDoc != null) return fallbackDoc
+            }
+            throw e
+        }
+
+        if (response.code == 403 || response.code == 503) {
+            response.close()
+            // Cloudflare/WAF challenge detected: fallback to headless WebView
+            val context = try { com.drnishanth.novellib.NovelLibApplication.instance } catch (_: Exception) { null }
+            if (context != null) {
+                val fallbackDoc = WebViewDocumentFetcher.fetchDocument(context, url)
+                if (fallbackDoc != null) return fallbackDoc
+            }
+            throw IllegalStateException("HTTP request failed with code ${response.code} for $url (Cloudflare/Bot protection)")
+        }
+
         if (!response.isSuccessful) {
-            throw IllegalStateException("HTTP request failed with code ${response.code} for $url")
+            val code = response.code
+            response.close()
+            throw IllegalStateException("HTTP request failed with code $code for $url")
         }
 
         val body = response.body?.string() ?: throw IllegalStateException("Empty response body from $url")

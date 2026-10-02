@@ -59,6 +59,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,7 +85,7 @@ fun LibraryScreen(
     viewModel: LibraryViewModel,
     onNovelSelected: (String) -> Unit,
     onSwitchProfile: () -> Unit,
-    onOpenSources: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onOpenSources: () -> Unit = {},
     onOpenSync: () -> Unit = {},
     onOpenBrowser: (String) -> Unit = {}
 ) {
@@ -95,7 +96,7 @@ fun LibraryScreen(
     val editProfileError by viewModel.editProfileError.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var novelPendingRemoval by remember { mutableStateOf<NovelWithEntry?>(null) }
-    var currentTab by remember { mutableStateOf(HomeTab.LIBRARY) }
+    var currentTab by rememberSaveable { mutableStateOf(HomeTab.LIBRARY) }
 
     val sourcesVm: SourcesViewModel = viewModel()
     val sourcesUiState by sourcesVm.uiState.collectAsState()

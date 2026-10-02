@@ -286,7 +286,7 @@ object DefaultSourceDefinitions {
 
     val LITFIC = SourceDefinition(
         id = "litfic",
-        version = 1,
+        version = 2,
         name = "LitFic",
         description = "Serialized modern fiction, web novels, and original community stories",
         minimumEngineVersion = 1,
@@ -310,7 +310,7 @@ object DefaultSourceDefinitions {
         ),
         novel = NovelRules(
             title = SelectorRule(
-                selector = "h1, .font-display",
+                selector = "main h1, h1, meta[property='og:title']",
                 type = "text",
                 transform = listOf("trim")
             ),

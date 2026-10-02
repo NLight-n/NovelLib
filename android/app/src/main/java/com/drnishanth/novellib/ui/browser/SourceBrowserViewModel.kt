@@ -20,9 +20,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.net.URI
+import kotlin.coroutines.resume
 
 data class SourceBrowserUiState(
     val currentUrl: String = "",
@@ -241,7 +243,7 @@ class SourceBrowserViewModel(
         }
     }
 
-    fun importCurrentNovel() {
+    fun importCurrentNovel(webView: WebView? = null) {
         val url = _uiState.value.currentUrl
         val profile = activeProfile.value ?: return
 
@@ -252,7 +254,34 @@ class SourceBrowserViewModel(
 
         viewModelScope.launch {
             _uiState.update { it.copy(isImporting = true, errorMessage = null) }
-            val result = novelRepository.importNovelFromUrl(url.trim(), profile.id)
+
+            // Extract outerHTML directly from active WebView to bypass Cloudflare and render SPA DOM
+            val preloadedHtml: String? = if (webView != null) {
+                withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { continuation ->
+                        webView.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
+                            if (result != null && result != "null" && result.length > 50) {
+                                val unescaped = try {
+                                    org.json.JSONTokener(result).nextValue() as? String ?: result
+                                } catch (_: Exception) {
+                                    result
+                                }
+                                if (continuation.isActive) {
+                                    continuation.resume(unescaped)
+                                }
+                            } else {
+                                if (continuation.isActive) {
+                                    continuation.resume(null)
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                null
+            }
+
+            val result = novelRepository.importNovelFromUrl(url.trim(), profile.id, preloadedHtml)
             if (result.isSuccess) {
                 val novel = result.getOrNull()
                 _uiState.update {

@@ -1,5 +1,6 @@
 package com.drnishanth.novellib.ui.sources
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.SubcomposeAsyncImage
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -210,6 +217,116 @@ fun resolveBrowseUrl(definition: SourceDefinitionEntity): String {
     }
 }
 
+data class SourceBrandStyle(
+    val domain: String,
+    val monogram: String,
+    val primaryColor: Color,
+    val secondaryColor: Color
+)
+
+fun resolveBrandStyle(id: String, name: String, jsonContent: String): SourceBrandStyle {
+    return when (id.lowercase()) {
+        "royalroad" -> SourceBrandStyle(
+            domain = "royalroad.com",
+            monogram = "RR",
+            primaryColor = Color(0xFF1E3A8A),
+            secondaryColor = Color(0xFFD97706)
+        )
+        "scribblehub" -> SourceBrandStyle(
+            domain = "scribblehub.com",
+            monogram = "SH",
+            primaryColor = Color(0xFF7C3AED),
+            secondaryColor = Color(0xFFEC4899)
+        )
+        "novgo" -> SourceBrandStyle(
+            domain = "novgo.net",
+            monogram = "NG",
+            primaryColor = Color(0xFF059669),
+            secondaryColor = Color(0xFF0D9488)
+        )
+        "litfic" -> SourceBrandStyle(
+            domain = "litfic.com",
+            monogram = "LF",
+            primaryColor = Color(0xFFEA580C),
+            secondaryColor = Color(0xFFDC2626)
+        )
+        "tapas" -> SourceBrandStyle(
+            domain = "tapas.io",
+            monogram = "T",
+            primaryColor = Color(0xFFF59E0B),
+            secondaryColor = Color(0xFFB45309)
+        )
+        "novelupdates" -> SourceBrandStyle(
+            domain = "novelupdates.com",
+            monogram = "NU",
+            primaryColor = Color(0xFF2563EB),
+            secondaryColor = Color(0xFF0284C7)
+        )
+        else -> {
+            val domain = try {
+                val json = org.json.JSONObject(jsonContent)
+                val match = json.getJSONObject("match")
+                val hosts = match.optJSONArray("hosts")
+                if (hosts != null && hosts.length() > 0) hosts.getString(0) else "web"
+            } catch (_: Exception) {
+                "web"
+            }
+            val mono = name.take(2).uppercase().ifBlank { id.take(2).uppercase() }
+            SourceBrandStyle(
+                domain = domain,
+                monogram = mono,
+                primaryColor = Color(0xFF475569),
+                secondaryColor = Color(0xFF334155)
+            )
+        }
+    }
+}
+
+@Composable
+fun SourceBrandBadge(
+    brandStyle: SourceBrandStyle,
+    modifier: Modifier = Modifier
+) {
+    val faviconUrl = "https://www.google.com/s2/favicons?domain=${brandStyle.domain}&sz=128"
+
+    Box(
+        modifier = modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(brandStyle.primaryColor, brandStyle.secondaryColor)
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        SubcomposeAsyncImage(
+            model = faviconUrl,
+            contentDescription = brandStyle.domain,
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(6.dp)),
+            contentScale = ContentScale.Fit,
+            loading = {
+                Text(
+                    text = brandStyle.monogram,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp
+                )
+            },
+            error = {
+                Text(
+                    text = brandStyle.monogram,
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 17.sp
+                )
+            }
+        )
+    }
+}
+
 @Composable
 fun SourceItemCard(
     definition: SourceDefinitionEntity,
@@ -220,6 +337,10 @@ fun SourceItemCard(
     onRollback: () -> Unit,
     onToggleEnabled: () -> Unit
 ) {
+    val brandStyle = remember(definition.id, definition.name) {
+        resolveBrandStyle(definition.id, definition.name, definition.jsonContent)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -232,9 +353,13 @@ fun SourceItemCard(
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                SourceBrandBadge(
+                    brandStyle = brandStyle,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = definition.name,
@@ -242,7 +367,7 @@ fun SourceItemCard(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "v${definition.version}  •  ${definition.id}",
+                        text = "${brandStyle.domain}  •  v${definition.version}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
