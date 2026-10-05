@@ -1,8 +1,8 @@
 {
   "id": "tapas",
-  "version": 1,
+  "version": 2,
   "name": "Tapas",
-  "description": "Web novels, serialized community books, and light fiction",
+  "description": "Tapas digital comics and web novels platform",
   "minimum_engine_version": 1,
   "match": {
     "hosts": [
@@ -15,7 +15,7 @@
       "https://tapas.io/episode/*",
       "https://www.tapas.io/episode/*"
     ],
-    "novel_url_pattern": "https://tapas.io/series/*"
+    "novel_url_pattern": "https://(?:www\\.)?tapas\\.io/series/[^/]+(?:/info)?$"
   },
   "requests": {
     "default": {
@@ -25,39 +25,46 @@
       }
     }
   },
+  "rendering": {
+    "mode": "auto",
+    "ready_selector": "article.viewer__body, div.viewer__body, .content__body",
+    "min_text_characters": 300,
+    "max_wait_ms": 12000,
+    "scroll_until_stable": false
+  },
   "novel": {
     "title": {
-      "selector": "h1.title, .title, a.title, .series-header__title, h1",
+      "selector": ".series-header .title, h1.title, h1",
       "type": "text",
       "transform": ["trim"]
     },
     "author": {
-      "selector": "a.creator, .creator__name, a[href*='/creator/'], .creator",
+      "selector": ".creator-info .name, a.name, .author, span.name",
       "type": "text",
       "transform": ["trim"]
     },
     "description": {
-      "selector": ".description, .content__body, p.desc, meta[property='og:description']",
+      "selector": ".description, .description__body, div.info-desc",
       "type": "html",
       "transform": ["trim"]
     },
     "cover": {
-      "selector": "img.thumb, .thumb img, meta[property='og:image'], img",
+      "selector": ".thumb img, .thumb-wrap img, img.thumb, meta[property='og:image']",
       "type": "attribute",
       "attribute": "src",
       "transform": ["absolute_url"]
     },
     "status": {
-      "selector": ".status, .badge",
+      "selector": ".additional-info .status, span.status",
       "type": "text",
       "transform": ["trim"]
     },
     "tags": {
-      "selector": "a.tag, .tag, a[href*='/genres/'], .genre, .sub-genre",
+      "selector": ".genre a, .tag-list a, .genre-btn, a.genre",
       "attribute": "text",
       "transform": "trim"
     },
-    "content_warnings": {
+    "contentWarnings": {
       "selector": ".warning, .badge--warning",
       "attribute": "text",
       "transform": "trim"
@@ -81,6 +88,37 @@
     "content": {
       "selector": "article.viewer__body, div.viewer__body, .content__body, article",
       "type": "html"
+    },
+    "content_selectors": [
+      {
+        "selector": "article.viewer__body",
+        "type": "html"
+      },
+      {
+        "selector": "div.viewer__body",
+        "type": "html"
+      },
+      {
+        "selector": ".content__body",
+        "type": "html"
+      },
+      {
+        "selector": "article",
+        "type": "html"
+      }
+    ],
+    "validation": {
+      "min_text_characters": 300,
+      "min_paragraphs": 2,
+      "max_link_density": 0.35,
+      "reject_title_patterns": [
+        "just a moment",
+        "checking your browser",
+        "access denied",
+        "verify you are human",
+        "sign in to read",
+        "unlock episode"
+      ]
     },
     "sanitize": {
       "remove_tags": ["script", "style", "iframe", "button"],

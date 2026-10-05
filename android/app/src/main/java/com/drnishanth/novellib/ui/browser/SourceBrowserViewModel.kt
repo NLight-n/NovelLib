@@ -38,7 +38,10 @@ data class SourceBrowserUiState(
     val restrictedTags: List<String> = emptyList(),
     val isImporting: Boolean = false,
     val importSuccessMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val isChapterDetected: Boolean = false,
+    val detectedChapter: com.drnishanth.novellib.core.database.entities.ChapterEntity? = null,
+    val isSavingChapter: Boolean = false
 )
 
 class SourceBrowserViewModel(
@@ -137,13 +140,16 @@ class SourceBrowserViewModel(
             }
 
             if (matchingDef == null) {
+                val detectedChap = novelRepository.findChapterByUrl(url)
                 _uiState.update {
                     it.copy(
                         isNovelDetected = false,
                         detectedDefinition = null,
                         isInLibrary = false,
                         isRestricted = false,
-                        restrictedTags = emptyList()
+                        restrictedTags = emptyList(),
+                        isChapterDetected = detectedChap != null,
+                        detectedChapter = detectedChap
                     )
                 }
                 return@launch
@@ -180,7 +186,9 @@ class SourceBrowserViewModel(
                     detectedDefinition = matchingDef,
                     isInLibrary = inLibrary,
                     isRestricted = isRestricted,
-                    restrictedTags = matchedRestricted
+                    restrictedTags = matchedRestricted,
+                    isChapterDetected = false,
+                    detectedChapter = null
                 )
             }
 
@@ -259,7 +267,63 @@ class SourceBrowserViewModel(
             val preloadedHtml: String? = if (webView != null) {
                 withContext(Dispatchers.Main) {
                     suspendCancellableCoroutine { continuation ->
-                        webView.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
+                        val extractionJs = """
+                            (function() {
+                                try {
+                                    var host = window.location.hostname.toLowerCase();
+                                    if (host.indexOf("scribblehub.com") !== -1) {
+                                        var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
+                                        var postId = postIdInput ? postIdInput.value : null;
+                                        if (!postId) {
+                                            var m = window.location.pathname.match(/\/series\/(\d+)/);
+                                            if (m) postId = m[1];
+                                        }
+                                        if (postId) {
+                                            var existing = document.querySelectorAll("a.toc_a, li.toc_li");
+                                            if (existing.length === 0) {
+                                                var xhr = new XMLHttpRequest();
+                                                xhr.open("POST", "/wp-admin/admin-ajax.php", false);
+                                                xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                                                xhr.send("action=wi_getreleases_pagination&pagenum=-1&mypostid=" + postId);
+                                                if (xhr.status === 200 && xhr.responseText) {
+                                                    var container = document.getElementById("toc_list") || document.querySelector("ul.toc_w") || document.body;
+                                                    var tempDiv = document.createElement("div");
+                                                    tempDiv.id = "novellib-injected-toc";
+                                                    tempDiv.innerHTML = xhr.responseText;
+                                                    container.appendChild(tempDiv);
+                                                }
+                                            }
+                                        }
+                                    } else if (host.indexOf("novelupdates.com") !== -1) {
+                                        var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
+                                        var postId = postIdInput ? postIdInput.value : null;
+                                        if (!postId) {
+                                            var m = document.body.innerHTML.match(/mypostid["\s:=]+(\d+)/);
+                                            if (m) postId = m[1];
+                                        }
+                                        if (postId) {
+                                            var existing = document.querySelectorAll("#myTable tr, a[href*='/extnu/']");
+                                            if (existing.length === 0) {
+                                                var xhr = new XMLHttpRequest();
+                                                xhr.open("POST", "/wp-admin/admin-ajax.php", false);
+                                                xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+                                                xhr.send("action=nd_getchapters&mygrr=0&mypostid=" + postId);
+                                                if (xhr.status === 200 && xhr.responseText) {
+                                                    var container = document.getElementById("myTable") || document.body;
+                                                    var tempDiv = document.createElement("div");
+                                                    tempDiv.id = "novellib-injected-nu-toc";
+                                                    tempDiv.innerHTML = xhr.responseText;
+                                                    container.appendChild(tempDiv);
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (e) {}
+                                return document.documentElement.outerHTML;
+                            })()
+                        """.trimIndent()
+
+                        webView.evaluateJavascript(extractionJs) { result ->
                             if (result != null && result != "null" && result.length > 50) {
                                 val unescaped = try {
                                     org.json.JSONTokener(result).nextValue() as? String ?: result
@@ -296,6 +360,52 @@ class SourceBrowserViewModel(
                     it.copy(
                         isImporting = false,
                         errorMessage = result.exceptionOrNull()?.message ?: "Failed to import novel"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Captures pre-rendered DOM from the active WebView and validates/saves
+     * the chapter content directly into the library.
+     */
+    fun saveReadableChapter(webView: WebView? = null) {
+        val chapter = _uiState.value.detectedChapter ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSavingChapter = true, errorMessage = null) }
+            val html = if (webView != null) {
+                withContext(Dispatchers.Main) {
+                    suspendCancellableCoroutine { continuation ->
+                        webView.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
+                            val unescaped = try {
+                                if (result != null && result.startsWith("\"") && result.endsWith("\"")) {
+                                    org.json.JSONTokener(result).nextValue() as? String ?: result
+                                } else {
+                                    result ?: ""
+                                }
+                            } catch (_: Exception) {
+                                result ?: ""
+                            }
+                            if (continuation.isActive) continuation.resume(unescaped)
+                        }
+                    }
+                }
+            } else ""
+
+            val saveResult = novelRepository.saveReadableChapterContent(chapter.id, html)
+            if (saveResult.isSuccess) {
+                _uiState.update {
+                    it.copy(
+                        isSavingChapter = false,
+                        importSuccessMessage = "Saved readable chapter: \"${chapter.title}\""
+                    )
+                }
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isSavingChapter = false,
+                        errorMessage = saveResult.exceptionOrNull()?.message ?: "Failed to validate/save chapter content"
                     )
                 }
             }

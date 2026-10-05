@@ -50,5 +50,14 @@ data class LibraryEntryEntity(
     val autoDownloadEnabled: Boolean = true,
 
     @ColumnInfo(name = "last_opened_at")
-    val lastOpenedAt: Long? = null
+    val lastOpenedAt: Long? = null,
+
+    @ColumnInfo(name = "addiction_limit", defaultValue = "0")
+    val addictionLimit: Int = 0,
+
+    @ColumnInfo(name = "session_chapters_read", defaultValue = "0")
+    val sessionChaptersRead: Int = 0,
+
+    @ColumnInfo(name = "locked_until", defaultValue = "0")
+    val lockedUntil: Long = 0L
 )

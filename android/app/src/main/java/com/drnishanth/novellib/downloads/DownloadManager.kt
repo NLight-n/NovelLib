@@ -12,6 +12,8 @@ import com.drnishanth.novellib.downloads.models.RetentionPolicy
 import com.drnishanth.novellib.scraping.engine.DefaultSourceDefinitions
 import com.drnishanth.novellib.scraping.engine.RollbackManager
 import com.drnishanth.novellib.scraping.engine.SourceDefinitionEngine
+import com.drnishanth.novellib.scraping.models.ChapterExtractionException
+import com.drnishanth.novellib.scraping.models.ExtractionFailureReason
 import com.drnishanth.novellib.scraping.models.SourceDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -147,9 +149,14 @@ class DownloadManager(
             updateStatus(chapterId, DownloadState.AVAILABLE)
             true
         } catch (e: Exception) {
+            val isActionRequired = (e as? ChapterExtractionException)?.let {
+                it.reason == ExtractionFailureReason.AUTH_REQUIRED || it.reason == ExtractionFailureReason.CHALLENGE
+            } ?: false
+            val failureState = if (isActionRequired) DownloadState.ACTION_REQUIRED else DownloadState.FAILED
+
             chapterDao.updateDownloadState(
                 chapterId = chapter.id,
-                state = DownloadState.FAILED.value,
+                state = failureState.value,
                 filePath = null,
                 contentHash = null,
                 downloadedAt = null
@@ -157,7 +164,7 @@ class DownloadManager(
             findMatchingDefinition(chapter.sourceUrl)?.let { def ->
                 rollbackManager?.recordFailure(def.id)
             }
-            updateStatus(chapterId, DownloadState.FAILED, e.message)
+            updateStatus(chapterId, failureState, e.message)
             false
         }
     }

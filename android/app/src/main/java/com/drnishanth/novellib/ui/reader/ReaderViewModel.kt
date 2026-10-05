@@ -21,6 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import com.drnishanth.novellib.scraping.models.ChapterExtractionException
+import com.drnishanth.novellib.scraping.models.ExtractionFailureReason
+import com.drnishanth.novellib.data.repository.AddictionStatus
 import org.jsoup.Jsoup
 
 data class ReaderUiState(
@@ -30,6 +33,7 @@ data class ReaderUiState(
     val nextChapterId: String? = null,
     val paragraphs: List<String> = emptyList(),
     val errorMessage: String? = null,
+    val failureReason: ExtractionFailureReason? = null,
     val showControls: Boolean = false,
     val initialScrollIndex: Int = 0,
     val preferences: ReaderPreferencesEntity = ReaderPreferencesEntity(profileId = ""),
@@ -38,12 +42,17 @@ data class ReaderUiState(
     val pages: List<ReaderPagingEngine.ReaderPage> = emptyList(),
     val currentPageIndex: Int = 0,
     val isPageRefreshFlashing: Boolean = false,
-    val batteryStatus: BatteryDiagnostics.BatteryStatus? = null
+    val batteryStatus: BatteryDiagnostics.BatteryStatus? = null,
+    // De-addiction timer state
+    val isAddictionLocked: Boolean = false,
+    val lockedUntil: Long = 0L,
+    val addictionLimit: Int = 0,
+    val novelTitle: String = ""
 )
 
 class ReaderViewModel(
     val novelId: String,
-    initialChapterId: String,
+    private val initialChapterId: String,
     private val novelRepository: NovelRepository = NovelLibApplication.instance.novelRepository,
     private val profileRepository: ProfileRepository = NovelLibApplication.instance.profileRepository,
     private val downloadManager: DownloadManager = NovelLibApplication.instance.downloadManager
@@ -58,6 +67,7 @@ class ReaderViewModel(
 
     private var allChapters: List<ChapterEntity> = emptyList()
     private var pageTurnCount = 0
+    private val sessionReadChapterIds = mutableSetOf<String>()
 
     init {
         loadBatteryDiagnostics()
@@ -95,6 +105,29 @@ class ReaderViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
 
+            // Check if novel is addiction-locked
+            val profileId = profileRepository.activeProfile.value?.id
+            if (profileId != null) {
+                val lockStatus = novelRepository.checkAddictionLock(profileId, novelId)
+                if (lockStatus is AddictionStatus.Locked) {
+                    val novel = novelRepository.getNovel(novelId)
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        isAddictionLocked = true,
+                        lockedUntil = lockStatus.lockedUntil,
+                        addictionLimit = lockStatus.limit,
+                        novelTitle = novel?.title ?: "Novel"
+                    )
+                    return@launch
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        isAddictionLocked = false,
+                        lockedUntil = 0L,
+                        addictionLimit = if (lockStatus is AddictionStatus.Active) lockStatus.limit else 0
+                    )
+                }
+            }
+
             // Cache chapter list for next/prev navigation
             if (allChapters.isEmpty()) {
                 allChapters = novelRepository.getChapters(novelId).firstOrNull() ?: emptyList()
@@ -106,7 +139,6 @@ class ReaderViewModel(
             val nextId = if (currentIndex in 0 until allChapters.size - 1) allChapters[currentIndex + 1].id else null
 
             // Check if there is saved reading progress for this chapter
-            val profileId = profileRepository.activeProfile.value?.id
             var savedPos = 0
             if (profileId != null) {
                 val progress = novelRepository.getReadingProgress(profileId, novelId).firstOrNull()
@@ -137,7 +169,9 @@ class ReaderViewModel(
                     paragraphs = parsedParagraphs,
                     pages = generatedPages,
                     currentPageIndex = targetPageIndex,
-                    initialScrollIndex = savedPos
+                    initialScrollIndex = savedPos,
+                    errorMessage = null,
+                    failureReason = null
                 )
 
                 // Save/update progress to current chapter
@@ -157,14 +191,34 @@ class ReaderViewModel(
                         novelId = novelId,
                         chapterId = chapterId
                     )
+
+                    // Track session reading progress for addiction control
+                    if (sessionReadChapterIds.add(chapterId)) {
+                        val addictionStatus = novelRepository.recordChapterReadForAddiction(
+                            profileId = profileId,
+                            novelId = novelId,
+                            chapterId = chapterId
+                        )
+                        if (addictionStatus is AddictionStatus.Locked) {
+                            val novel = novelRepository.getNovel(novelId)
+                            _uiState.value = _uiState.value.copy(
+                                lockedUntil = addictionStatus.lockedUntil,
+                                addictionLimit = addictionStatus.limit,
+                                novelTitle = novel?.title ?: "Novel"
+                            )
+                        }
+                    }
                 }
             } else {
+                val ex = contentResult.exceptionOrNull()
+                val reason = (ex as? ChapterExtractionException)?.reason
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     currentChapter = currentChapter,
                     previousChapterId = prevId,
                     nextChapterId = nextId,
-                    errorMessage = contentResult.exceptionOrNull()?.message ?: "Failed to load chapter content"
+                    errorMessage = ex?.message ?: "Failed to load chapter content",
+                    failureReason = reason
                 )
             }
         }
@@ -391,5 +445,10 @@ class ReaderViewModel(
                 .map { Jsoup.parse(it).text().trim() }
                 .filter { it.isNotBlank() }
         }
+    }
+
+    fun onLockoutExpired() {
+        val targetId = _uiState.value.currentChapter?.id ?: initialChapterId
+        loadChapter(targetId)
     }
 }

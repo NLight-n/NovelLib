@@ -2,7 +2,9 @@ package com.drnishanth.novellib.scraping.engine
 
 import com.drnishanth.novellib.scraping.models.ChapterRule
 import com.drnishanth.novellib.scraping.models.ChaptersRules
+import com.drnishanth.novellib.scraping.models.ContentValidationRule
 import com.drnishanth.novellib.scraping.models.NovelRules
+import com.drnishanth.novellib.scraping.models.RenderingRule
 import com.drnishanth.novellib.scraping.models.RequestConfig
 import com.drnishanth.novellib.scraping.models.SanitizeRule
 import com.drnishanth.novellib.scraping.models.SelectorRule
@@ -13,7 +15,7 @@ import com.drnishanth.novellib.scraping.models.TagSelectorRule
 object DefaultSourceDefinitions {
     val ROYAL_ROAD = SourceDefinition(
         id = "royalroad",
-        version = 3,
+        version = 5,
         name = "Royal Road",
         description = "Royal Road online web fiction platform",
         minimumEngineVersion = 1,
@@ -33,6 +35,13 @@ object DefaultSourceDefinitions {
                 )
             )
         ),
+        rendering = RenderingRule(
+            mode = "auto",
+            readySelector = ".chapter-content",
+            minTextCharacters = 300,
+            maxWaitMs = 12000L,
+            scrollUntilStable = false
+        ),
         novel = NovelRules(
             title = SelectorRule(
                 selector = "h1",
@@ -45,7 +54,7 @@ object DefaultSourceDefinitions {
                 transform = listOf("trim")
             ),
             description = SelectorRule(
-                selector = ".description .description-content",
+                selector = ".description .hidden-content, .description, div[property='description'], .fiction-info .description, meta[property='og:description']",
                 type = "html",
                 transform = listOf("trim")
             ),
@@ -95,6 +104,22 @@ object DefaultSourceDefinitions {
                 selector = ".chapter-content",
                 type = "html"
             ),
+            contentSelectors = listOf(
+                SelectorRule(".chapter-content", "html"),
+                SelectorRule(".chapter-inner", "html"),
+                SelectorRule("article", "html")
+            ),
+            validation = ContentValidationRule(
+                minTextCharacters = 300,
+                minParagraphs = 2,
+                maxLinkDensity = 0.35,
+                rejectTitlePatterns = listOf(
+                    "just a moment",
+                    "checking your browser",
+                    "access denied",
+                    "verify you are human"
+                )
+            ),
             sanitize = SanitizeRule(
                 removeTags = listOf("script", "style", "iframe", "button", "div.author-note-portlet"),
                 allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
@@ -104,7 +129,7 @@ object DefaultSourceDefinitions {
 
     val SCRIBBLE_HUB = SourceDefinition(
         id = "scribblehub",
-        version = 2,
+        version = 4,
         name = "Scribble Hub",
         description = "Original web stories, community fiction, and serialized light novels",
         minimumEngineVersion = 1,
@@ -125,6 +150,13 @@ object DefaultSourceDefinitions {
                     "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
                 )
             )
+        ),
+        rendering = RenderingRule(
+            mode = "auto",
+            readySelector = "div.chp_raw",
+            minTextCharacters = 300,
+            maxWaitMs = 12000L,
+            scrollUntilStable = false
         ),
         novel = NovelRules(
             title = SelectorRule(
@@ -165,7 +197,7 @@ object DefaultSourceDefinitions {
             )
         ),
         chapters = ChaptersRules(
-            container = "ul.toc_w li.toc_li, .toc_li, ul.toc_w li",
+            container = "ul.toc_w li.toc_li, .toc_li, ul.toc_w li, a.toc_a, #novellib-injected-toc a.toc_a, #novellib-injected-toc li",
             title = SelectorRule(
                 selector = "a.toc_a, a",
                 type = "text",
@@ -188,6 +220,23 @@ object DefaultSourceDefinitions {
                 selector = "div.chp_raw, .chp_raw, #chp_raw",
                 type = "html"
             ),
+            contentSelectors = listOf(
+                SelectorRule("div.chp_raw", "html"),
+                SelectorRule("#chp_raw", "html"),
+                SelectorRule(".chp_raw", "html"),
+                SelectorRule("article", "html")
+            ),
+            validation = ContentValidationRule(
+                minTextCharacters = 300,
+                minParagraphs = 2,
+                maxLinkDensity = 0.35,
+                rejectTitlePatterns = listOf(
+                    "just a moment",
+                    "checking your browser",
+                    "access denied",
+                    "verify you are human"
+                )
+            ),
             sanitize = SanitizeRule(
                 removeTags = listOf("script", "style", "iframe", "button"),
                 allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
@@ -197,7 +246,7 @@ object DefaultSourceDefinitions {
 
     val NOVGO = SourceDefinition(
         id = "novgo",
-        version = 2,
+        version = 3,
         name = "NovGo",
         description = "NovGo online free web novels and light fiction",
         minimumEngineVersion = 1,
@@ -218,6 +267,13 @@ object DefaultSourceDefinitions {
                     "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
                 )
             )
+        ),
+        rendering = RenderingRule(
+            mode = "auto",
+            readySelector = "#chapter-content",
+            minTextCharacters = 300,
+            maxWaitMs = 12000L,
+            scrollUntilStable = false
         ),
         novel = NovelRules(
             title = SelectorRule(
@@ -277,6 +333,22 @@ object DefaultSourceDefinitions {
                 selector = "#chapter-content",
                 type = "html"
             ),
+            contentSelectors = listOf(
+                SelectorRule("#chapter-content", "html"),
+                SelectorRule(".chapter-content", "html"),
+                SelectorRule("article", "html")
+            ),
+            validation = ContentValidationRule(
+                minTextCharacters = 300,
+                minParagraphs = 2,
+                maxLinkDensity = 0.35,
+                rejectTitlePatterns = listOf(
+                    "just a moment",
+                    "checking your browser",
+                    "access denied",
+                    "verify you are human"
+                )
+            ),
             sanitize = SanitizeRule(
                 removeTags = listOf("script", "style", "iframe", "button", "div.ads", "div.ad", "ins"),
                 allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
@@ -286,7 +358,7 @@ object DefaultSourceDefinitions {
 
     val LITFIC = SourceDefinition(
         id = "litfic",
-        version = 2,
+        version = 4,
         name = "LitFic",
         description = "Serialized modern fiction, web novels, and original community stories",
         minimumEngineVersion = 1,
@@ -308,9 +380,16 @@ object DefaultSourceDefinitions {
                 )
             )
         ),
+        rendering = RenderingRule(
+            mode = "auto",
+            readySelector = "div.reader-content, article, div[class*='reader']",
+            minTextCharacters = 300,
+            maxWaitMs = 12000L,
+            scrollUntilStable = false
+        ),
         novel = NovelRules(
             title = SelectorRule(
-                selector = "main h1, h1, meta[property='og:title']",
+                selector = "main h1, h1.font-display, h1, meta[property='og:title'], title",
                 type = "text",
                 transform = listOf("trim")
             ),
@@ -365,6 +444,22 @@ object DefaultSourceDefinitions {
                 selector = "div.reader-content, article, div[class*='reader']",
                 type = "html"
             ),
+            contentSelectors = listOf(
+                SelectorRule("div.reader-content", "html"),
+                SelectorRule("article", "html"),
+                SelectorRule("div[class*='reader']", "html")
+            ),
+            validation = ContentValidationRule(
+                minTextCharacters = 300,
+                minParagraphs = 2,
+                maxLinkDensity = 0.35,
+                rejectTitlePatterns = listOf(
+                    "just a moment",
+                    "checking your browser",
+                    "access denied",
+                    "verify you are human"
+                )
+            ),
             sanitize = SanitizeRule(
                 removeTags = listOf("script", "style", "iframe", "button"),
                 allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
@@ -374,7 +469,7 @@ object DefaultSourceDefinitions {
 
     val TAPAS = SourceDefinition(
         id = "tapas",
-        version = 1,
+        version = 2,
         name = "Tapas",
         description = "Web novels, serialized community books, and light fiction",
         minimumEngineVersion = 1,
@@ -384,7 +479,7 @@ object DefaultSourceDefinitions {
                 "https://tapas.io/series/*",
                 "https://www.tapas.io/series/*",
                 "https://tapas.io/episode/*",
-                "https://www.tapas.io/episode/*"
+                "https://tapas.io/episode/*"
             ),
             novelUrlPattern = "https://tapas.io/series/*"
         ),
@@ -395,6 +490,13 @@ object DefaultSourceDefinitions {
                     "User-Agent" to "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1"
                 )
             )
+        ),
+        rendering = RenderingRule(
+            mode = "auto",
+            readySelector = "article.viewer__body, div.viewer__body, .content__body",
+            minTextCharacters = 300,
+            maxWaitMs = 12000L,
+            scrollUntilStable = false
         ),
         novel = NovelRules(
             title = SelectorRule(
@@ -453,6 +555,25 @@ object DefaultSourceDefinitions {
                 selector = "article.viewer__body, div.viewer__body, .content__body, article",
                 type = "html"
             ),
+            contentSelectors = listOf(
+                SelectorRule("article.viewer__body", "html"),
+                SelectorRule("div.viewer__body", "html"),
+                SelectorRule(".content__body", "html"),
+                SelectorRule("article", "html")
+            ),
+            validation = ContentValidationRule(
+                minTextCharacters = 300,
+                minParagraphs = 2,
+                maxLinkDensity = 0.35,
+                rejectTitlePatterns = listOf(
+                    "just a moment",
+                    "checking your browser",
+                    "access denied",
+                    "verify you are human",
+                    "sign in to read",
+                    "unlock episode"
+                )
+            ),
             sanitize = SanitizeRule(
                 removeTags = listOf("script", "style", "iframe", "button"),
                 allowTags = listOf("p", "br", "b", "i", "em", "strong", "h1", "h2", "h3", "blockquote")
@@ -462,7 +583,7 @@ object DefaultSourceDefinitions {
 
     val NOVEL_UPDATES = SourceDefinition(
         id = "novelupdates",
-        version = 1,
+        version = 3,
         name = "Novel Updates",
         description = "Directory, tracker, and reading index for Asian translated web novels",
         minimumEngineVersion = 1,
@@ -482,14 +603,21 @@ object DefaultSourceDefinitions {
                 )
             )
         ),
+        rendering = RenderingRule(
+            mode = "auto",
+            readySelector = "div.entry-content, article, div#content",
+            minTextCharacters = 300,
+            maxWaitMs = 12000L,
+            scrollUntilStable = false
+        ),
         novel = NovelRules(
             title = SelectorRule(
-                selector = ".seriestitlenine, h1.seriestitlenine, h1",
+                selector = ".seriestitlenu, .seriestitlenine, h1, div.seriestitlenu, meta[property='og:title']",
                 type = "text",
                 transform = listOf("trim")
             ),
             author = SelectorRule(
-                selector = "#authtag, #showauthors a, #showauthors",
+                selector = "#showAuthor a, #showauthors a, #authtag, #showAuthor, #showauthors",
                 type = "text",
                 transform = listOf("trim")
             ),
@@ -521,7 +649,7 @@ object DefaultSourceDefinitions {
             )
         ),
         chapters = ChaptersRules(
-            container = "table#myTable tbody tr, #myTable tr, ul.sp-toc li, a.chp_a",
+            container = "table#myTable tbody tr, #myTable tr, ul.sp-toc li, a.chp_a, a[href*='/extnu/'], a.chp-release-title, #novellib-injected-nu-toc a, #novellib-injected-nu-toc tr",
             title = SelectorRule(
                 selector = "a",
                 type = "text",
@@ -538,6 +666,23 @@ object DefaultSourceDefinitions {
             content = SelectorRule(
                 selector = "div.entry-content, article, div#content, .chapter-content",
                 type = "html"
+            ),
+            contentSelectors = listOf(
+                SelectorRule("div.entry-content", "html"),
+                SelectorRule("article", "html"),
+                SelectorRule("div#content", "html"),
+                SelectorRule(".chapter-content", "html")
+            ),
+            validation = ContentValidationRule(
+                minTextCharacters = 300,
+                minParagraphs = 2,
+                maxLinkDensity = 0.35,
+                rejectTitlePatterns = listOf(
+                    "just a moment",
+                    "checking your browser",
+                    "access denied",
+                    "verify you are human"
+                )
             ),
             sanitize = SanitizeRule(
                 removeTags = listOf("script", "style", "iframe", "button"),

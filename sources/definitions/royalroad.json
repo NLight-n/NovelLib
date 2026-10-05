@@ -1,6 +1,6 @@
 {
   "id": "royalroad",
-  "version": 3,
+  "version": 5,
   "name": "Royal Road",
   "description": "Royal Road online web fiction platform",
   "minimum_engine_version": 1,
@@ -23,6 +23,13 @@
       }
     }
   },
+  "rendering": {
+    "mode": "auto",
+    "ready_selector": ".chapter-content",
+    "min_text_characters": 300,
+    "max_wait_ms": 12000,
+    "scroll_until_stable": false
+  },
   "novel": {
     "title": {
       "selector": "h1",
@@ -35,7 +42,7 @@
       "transform": ["trim"]
     },
     "description": {
-      "selector": ".description .description-content",
+      "selector": ".description .hidden-content, .description, div[property='description'], .fiction-info .description, meta[property='og:description']",
       "type": "html",
       "transform": ["trim"]
     },
@@ -84,6 +91,31 @@
     "content": {
       "selector": ".chapter-content",
       "type": "html"
+    },
+    "content_selectors": [
+      {
+        "selector": ".chapter-content",
+        "type": "html"
+      },
+      {
+        "selector": ".chapter-inner",
+        "type": "html"
+      },
+      {
+        "selector": "article",
+        "type": "html"
+      }
+    ],
+    "validation": {
+      "min_text_characters": 300,
+      "min_paragraphs": 2,
+      "max_link_density": 0.35,
+      "reject_title_patterns": [
+        "just a moment",
+        "checking your browser",
+        "access denied",
+        "verify you are human"
+      ]
     },
     "sanitize": {
       "remove_tags": ["script", "style", "iframe", "button", "div.author-note-portlet"],

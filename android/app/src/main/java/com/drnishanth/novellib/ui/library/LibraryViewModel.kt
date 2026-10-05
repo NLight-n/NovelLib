@@ -99,6 +99,26 @@ class LibraryViewModel(
         }
     }
 
+    fun setAddictionLimit(novelId: String, limit: Int) {
+        val profile = activeProfile.value ?: return
+        viewModelScope.launch {
+            novelRepository.setAddictionLimit(profile.id, novelId, limit)
+            _uiState.value = _uiState.value.copy(
+                importSuccessMessage = if (limit > 0) "Addiction timer set: $limit chapter(s) per session" else "Addiction timer disabled"
+            )
+        }
+    }
+
+    fun resetAddictionTimer(novelId: String) {
+        val profile = activeProfile.value ?: return
+        viewModelScope.launch {
+            novelRepository.resetAddictionTimer(profile.id, novelId)
+            _uiState.value = _uiState.value.copy(
+                importSuccessMessage = "Addiction timer reset"
+            )
+        }
+    }
+
     fun switchProfile() {
         profileRepository.logout()
     }

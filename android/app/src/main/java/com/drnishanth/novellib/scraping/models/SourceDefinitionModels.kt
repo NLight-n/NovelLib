@@ -13,9 +13,27 @@ data class SourceDefinition(
     val minimumEngineVersion: Int = 1,
     val match: SourceMatch,
     val requests: Map<String, RequestConfig> = emptyMap(),
+    val rendering: RenderingRule? = null,
     val novel: NovelRules,
     val chapters: ChaptersRules,
     val chapter: ChapterRule
+)
+
+@Serializable
+data class RenderingRule(
+    val mode: String = "auto",
+    @SerialName("ready_selector") val readySelector: String? = null,
+    @SerialName("min_text_characters") val minTextCharacters: Int = 300,
+    @SerialName("max_wait_ms") val maxWaitMs: Long = 12_000L,
+    @SerialName("scroll_until_stable") val scrollUntilStable: Boolean = false
+)
+
+@Serializable
+data class ContentValidationRule(
+    @SerialName("min_text_characters") val minTextCharacters: Int = 300,
+    @SerialName("min_paragraphs") val minParagraphs: Int = 2,
+    @SerialName("max_link_density") val maxLinkDensity: Double = 0.50,
+    @SerialName("reject_title_patterns") val rejectTitlePatterns: List<String> = emptyList()
 )
 
 @Serializable
@@ -78,6 +96,9 @@ data class ChaptersRules(
 @Serializable
 data class ChapterRule(
     val content: SelectorRule,
+    @SerialName("content_selectors")
+    val contentSelectors: List<SelectorRule> = emptyList(),
+    val validation: ContentValidationRule? = null,
     val sanitize: SanitizeRule? = null
 )
 
@@ -112,3 +133,55 @@ data class ScrapedChapterContent(
     val htmlContent: String,
     val contentHash: String
 )
+
+enum class FetchMode { HTTP_ONLY, AUTO, WEBVIEW_ONLY }
+
+enum class ExtractionFailureReason {
+    NETWORK,
+    HTTP_ERROR,
+    AUTH_REQUIRED,
+    CHALLENGE,
+    NO_CONTENT,
+    CONTENT_INVALID,
+    TIMEOUT
+}
+
+enum class FetchMethod { HTTP, WEBVIEW }
+
+data class FetchedDocument(
+    val document: org.jsoup.nodes.Document,
+    val finalUrl: String,
+    val fetchMethod: FetchMethod,
+    val elapsedMs: Long
+)
+
+data class ContentValidationResult(
+    val valid: Boolean,
+    val reason: ExtractionFailureReason? = null,
+    val characterCount: Int = 0,
+    val paragraphCount: Int = 0,
+    val linkDensity: Double = 0.0,
+    val matchedRejection: String? = null
+)
+
+sealed interface ChapterExtractionResult {
+    data class Success(
+        val content: ScrapedChapterContent,
+        val fetchMethod: FetchMethod = FetchMethod.HTTP,
+        val usedFallback: Boolean = false
+    ) : ChapterExtractionResult
+
+    data class Failure(
+        val reason: ExtractionFailureReason,
+        val message: String,
+        val fetchMethod: FetchMethod? = null,
+        val validationResult: ContentValidationResult? = null
+    ) : ChapterExtractionResult
+}
+
+class ChapterExtractionException(
+    val reason: ExtractionFailureReason,
+    override val message: String,
+    val fetchMethod: FetchMethod? = null,
+    val validationResult: ContentValidationResult? = null
+) : Exception(message)

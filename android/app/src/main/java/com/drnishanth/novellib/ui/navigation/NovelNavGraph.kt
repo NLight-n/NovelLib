@@ -139,6 +139,9 @@ fun NovelNavGraph(
                 onBack = { navController.popBackStack() },
                 onOpenChapter = { chapterId ->
                     navController.navigate(Screen.Reader.createRoute(novelId, chapterId))
+                },
+                onOpenBrowser = { url ->
+                    navController.navigate(Screen.SourceBrowser.createRoute(url))
                 }
             )
         }
@@ -164,7 +167,10 @@ fun NovelNavGraph(
             )
             ReaderScreen(
                 viewModel = readerVm,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onOpenSourceBrowser = { url ->
+                    navController.navigate(Screen.SourceBrowser.createRoute(url))
+                }
             )
         }
     }

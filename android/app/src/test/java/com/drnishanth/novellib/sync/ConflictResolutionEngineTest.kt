@@ -386,6 +386,24 @@ class FakeNovelDao : NovelDao {
     override suspend fun getAllLibraryEntries(): List<LibraryEntryEntity> = entries.toList()
     override suspend fun getLibraryEntriesForNovel(novelId: String): List<LibraryEntryEntity> = entries.filter { it.novelId == novelId }
     override suspend fun updateNotificationPreference(profileId: String, novelId: String, enabled: Boolean) {}
+    override suspend fun updateAddictionLimit(profileId: String, novelId: String, limit: Int) {
+        val idx = entries.indexOfFirst { it.profileId == profileId && it.novelId == novelId }
+        if (idx >= 0) {
+            entries[idx] = entries[idx].copy(addictionLimit = limit, sessionChaptersRead = 0, lockedUntil = 0L)
+        }
+    }
+    override suspend fun updateAddictionSession(profileId: String, novelId: String, chaptersRead: Int, lockedUntil: Long) {
+        val idx = entries.indexOfFirst { it.profileId == profileId && it.novelId == novelId }
+        if (idx >= 0) {
+            entries[idx] = entries[idx].copy(sessionChaptersRead = chaptersRead, lockedUntil = lockedUntil)
+        }
+    }
+    override suspend fun resetAddictionSession(profileId: String, novelId: String) {
+        val idx = entries.indexOfFirst { it.profileId == profileId && it.novelId == novelId }
+        if (idx >= 0) {
+            entries[idx] = entries[idx].copy(sessionChaptersRead = 0, lockedUntil = 0L)
+        }
+    }
 }
 
 class FakeChapterDao : ChapterDao {

@@ -1,8 +1,8 @@
 {
   "id": "novelupdates",
-  "version": 1,
+  "version": 3,
   "name": "Novel Updates",
-  "description": "Directory, tracker, and reading index for Asian translated web novels",
+  "description": "Novel Updates Asian web novel directory and releases",
   "minimum_engine_version": 1,
   "match": {
     "hosts": [
@@ -13,7 +13,7 @@
       "https://www.novelupdates.com/series/*",
       "https://novelupdates.com/series/*"
     ],
-    "novel_url_pattern": "https://www.novelupdates.com/series/*"
+    "novel_url_pattern": "https://(?:www\\.)?novelupdates\\.com/series/[^/]+/$"
   },
   "requests": {
     "default": {
@@ -23,24 +23,31 @@
       }
     }
   },
+  "rendering": {
+    "mode": "auto",
+    "ready_selector": "div.entry-content, article, div#content",
+    "min_text_characters": 300,
+    "max_wait_ms": 12000,
+    "scroll_until_stable": false
+  },
   "novel": {
     "title": {
-      "selector": ".seriestitlenine, h1.seriestitlenine, h1",
+      "selector": ".seriestitlenu, h1.seriestitlenu, .seriestitle, h1",
       "type": "text",
       "transform": ["trim"]
     },
     "author": {
-      "selector": "#authtag, #showauthors a, #showauthors",
+      "selector": "#showauthors a, #showauthors, .author a",
       "type": "text",
       "transform": ["trim"]
     },
     "description": {
-      "selector": "#editdescription, .seriesdesc, #editdescription p",
+      "selector": "#editdescription, .seriesdesc",
       "type": "html",
       "transform": ["trim"]
     },
     "cover": {
-      "selector": ".seriesimg img, .seriesimg",
+      "selector": ".seriesimg img, .seriesimage img, img.seriesimg",
       "type": "attribute",
       "attribute": "src",
       "transform": ["absolute_url"]
@@ -51,18 +58,18 @@
       "transform": ["trim"]
     },
     "tags": {
-      "selector": "#showtags a, #showgenre a, a.genre, a.genretag",
+      "selector": "#seriesgenre a, #showtags a, .genre a",
       "attribute": "text",
       "transform": "trim"
     },
-    "content_warnings": {
-      "selector": "#showwarning a, .warning, .contentwarning",
+    "contentWarnings": {
+      "selector": ".warning a, .warning",
       "attribute": "text",
       "transform": "trim"
     }
   },
   "chapters": {
-    "container": "table#myTable tbody tr, #myTable tr, ul.sp-toc li, a.chp_a",
+    "container": "table#myTable tbody tr, #myTable tr, ul.sp-toc li, a.chp_a, a[href*='/extnu/'], a.chp-release-title, #novellib-injected-nu-toc a, #novellib-injected-nu-toc tr",
     "title": {
       "selector": "a",
       "type": "text",
@@ -79,6 +86,35 @@
     "content": {
       "selector": "div.entry-content, article, div#content, .chapter-content",
       "type": "html"
+    },
+    "content_selectors": [
+      {
+        "selector": "div.entry-content",
+        "type": "html"
+      },
+      {
+        "selector": "article",
+        "type": "html"
+      },
+      {
+        "selector": "div#content",
+        "type": "html"
+      },
+      {
+        "selector": ".chapter-content",
+        "type": "html"
+      }
+    ],
+    "validation": {
+      "min_text_characters": 300,
+      "min_paragraphs": 2,
+      "max_link_density": 0.35,
+      "reject_title_patterns": [
+        "just a moment",
+        "checking your browser",
+        "access denied",
+        "verify you are human"
+      ]
     },
     "sanitize": {
       "remove_tags": ["script", "style", "iframe", "button"],

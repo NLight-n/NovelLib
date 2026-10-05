@@ -5,7 +5,8 @@ enum class DownloadState(val value: String) {
     QUEUED("queued"),
     DOWNLOADING("downloading"),
     AVAILABLE("available"),
-    FAILED("failed");
+    FAILED("failed"),
+    ACTION_REQUIRED("action_required");
 
     companion object {
         fun fromString(str: String): DownloadState =

@@ -40,13 +40,19 @@ import com.drnishanth.novellib.core.database.entities.NovelTagCrossRef
 import com.drnishanth.novellib.core.database.entities.TagEntity
 import com.drnishanth.novellib.core.database.models.NovelWithTags
 
+sealed class AddictionStatus {
+    object Inactive : AddictionStatus()
+    data class Active(val current: Int, val limit: Int) : AddictionStatus()
+    data class Locked(val lockedUntil: Long, val limit: Int) : AddictionStatus()
+}
+
 class NovelRepository(
-    private val context: Context,
+    private val context: Context? = null,
     private val novelDao: NovelDao,
     private val chapterDao: ChapterDao,
     private val readingProgressDao: ReadingProgressDao,
     private val readerPreferencesDao: ReaderPreferencesDao,
-    private val sourceDefinitionDao: SourceDefinitionDao,
+    private val sourceDefinitionDao: SourceDefinitionDao? = null,
     private val notificationDao: NotificationDao? = null,
     private val readChapterDao: ReadChapterDao? = null,
     private val scraperEngine: SourceDefinitionEngine = SourceDefinitionEngine(),
@@ -114,6 +120,54 @@ class NovelRepository(
 
     suspend fun getLibraryEntry(profileId: String, novelId: String): LibraryEntryEntity? {
         return novelDao.getLibraryEntry(profileId, novelId)
+    }
+
+    suspend fun checkAddictionLock(profileId: String, novelId: String): AddictionStatus = withContext(Dispatchers.IO) {
+        val entry = novelDao.getLibraryEntry(profileId, novelId) ?: return@withContext AddictionStatus.Inactive
+        if (entry.addictionLimit <= 0) return@withContext AddictionStatus.Inactive
+
+        val now = System.currentTimeMillis()
+        if (entry.lockedUntil > now) {
+            return@withContext AddictionStatus.Locked(lockedUntil = entry.lockedUntil, limit = entry.addictionLimit)
+        } else if (entry.lockedUntil > 0L) {
+            // Lock period expired, reset session chapters read and lock
+            novelDao.updateAddictionSession(profileId, novelId, chaptersRead = 0, lockedUntil = 0L)
+            return@withContext AddictionStatus.Active(current = 0, limit = entry.addictionLimit)
+        }
+        return@withContext AddictionStatus.Active(current = entry.sessionChaptersRead, limit = entry.addictionLimit)
+    }
+
+    suspend fun recordChapterReadForAddiction(
+        profileId: String,
+        novelId: String,
+        chapterId: String
+    ): AddictionStatus = withContext(Dispatchers.IO) {
+        val entry = novelDao.getLibraryEntry(profileId, novelId) ?: return@withContext AddictionStatus.Inactive
+        if (entry.addictionLimit <= 0) return@withContext AddictionStatus.Inactive
+
+        val now = System.currentTimeMillis()
+        val isExpiredLock = entry.lockedUntil > 0L && entry.lockedUntil <= now
+        val isSessionStale = entry.lastOpenedAt != null && (now - entry.lastOpenedAt) > 3600_000L
+
+        val currentCount = if (isExpiredLock || isSessionStale) 0 else entry.sessionChaptersRead
+        val newCount = currentCount + 1
+
+        if (newCount >= entry.addictionLimit) {
+            val lockUntil = now + 3600_000L // 1 hour lockout
+            novelDao.updateAddictionSession(profileId, novelId, chaptersRead = 0, lockedUntil = lockUntil)
+            AddictionStatus.Locked(lockedUntil = lockUntil, limit = entry.addictionLimit)
+        } else {
+            novelDao.updateAddictionSession(profileId, novelId, chaptersRead = newCount, lockedUntil = 0L)
+            AddictionStatus.Active(current = newCount, limit = entry.addictionLimit)
+        }
+    }
+
+    suspend fun setAddictionLimit(profileId: String, novelId: String, limit: Int) = withContext(Dispatchers.IO) {
+        novelDao.updateAddictionLimit(profileId, novelId, limit.coerceAtLeast(0))
+    }
+
+    suspend fun resetAddictionTimer(profileId: String, novelId: String) = withContext(Dispatchers.IO) {
+        novelDao.resetAddictionSession(profileId, novelId)
     }
 
     suspend fun updateDownloadPolicy(
@@ -350,7 +404,8 @@ class NovelRepository(
             val scraped = scraperEngine.scrapeChapterContent(chapter.sourceUrl, definition)
 
             // Save to private internal storage
-            val chaptersDir = File(context.filesDir, "chapters/${chapter.novelId}")
+            val baseDir = context?.filesDir ?: File(System.getProperty("java.io.tmpdir", "."), "novellib-chapters")
+            val chaptersDir = File(baseDir, "chapters/${chapter.novelId}")
             if (!chaptersDir.exists()) chaptersDir.mkdirs()
 
             val targetFile = File(chaptersDir, "${scraped.contentHash}.html")
@@ -378,9 +433,51 @@ class NovelRepository(
         }
     }
 
+    suspend fun findChapterByUrl(url: String): ChapterEntity? {
+        return chapterDao.getChapterByUrl(url)
+    }
+
+    /**
+     * Saves validated readable chapter content from pre-rendered DOM (e.g. from Source Browser).
+     * Enforces extraction quality validation: never saves invalid or challenge pages.
+     */
+    suspend fun saveReadableChapterContent(chapterId: String, renderedHtml: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val chapter = chapterDao.getChapterById(chapterId)
+                ?: return@withContext Result.failure(IllegalArgumentException("Chapter not found"))
+
+            val definition = findMatchingDefinition(chapter.sourceUrl)
+                ?: return@withContext Result.failure(
+                    IllegalStateException("No source definition available to read chapter")
+                )
+
+            val scraped = scraperEngine.scrapeChapterContent(chapter.sourceUrl, definition, preloadedHtml = renderedHtml)
+
+            val baseDir = context?.filesDir ?: File(System.getProperty("java.io.tmpdir", "."), "novellib-chapters")
+            val chaptersDir = File(baseDir, "chapters/${chapter.novelId}")
+            if (!chaptersDir.exists()) chaptersDir.mkdirs()
+
+            val targetFile = File(chaptersDir, "${scraped.contentHash}.html")
+            targetFile.writeText(scraped.htmlContent, Charsets.UTF_8)
+
+            chapterDao.updateDownloadState(
+                chapterId = chapter.id,
+                state = "available",
+                filePath = targetFile.absolutePath,
+                contentHash = scraped.contentHash,
+                downloadedAt = System.currentTimeMillis()
+            )
+
+            rollbackManager?.recordSuccess(definition.id)
+            Result.success(scraped.htmlContent)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun findMatchingDefinition(url: String): SourceDefinition? {
         // First check custom definitions in Room
-        val customDefs = sourceDefinitionDao.getAllDefinitionsDirect()
+        val customDefs = sourceDefinitionDao?.getAllDefinitionsDirect() ?: emptyList()
         for (entity in customDefs) {
             try {
                 val parsed = json.decodeFromString<SourceDefinition>(entity.jsonContent)
@@ -482,14 +579,16 @@ class NovelRepository(
                 val libraryEntries = novelDao.getLibraryEntriesForNovel(novelId)
                 for (entry in libraryEntries) {
                     if (entry.notificationsEnabled) {
-                        NovelNotificationManager.showNewChaptersNotification(
-                            context = context,
-                            profileId = entry.profileId,
-                            novelId = novelId,
-                            novelTitle = novel.title,
-                            newChaptersCount = allNewChapters.size,
-                            firstChapterTitle = allNewChapters.firstOrNull()?.title
-                        )
+                        if (context != null) {
+                            NovelNotificationManager.showNewChaptersNotification(
+                                context = context,
+                                profileId = entry.profileId,
+                                novelId = novelId,
+                                novelTitle = novel.title,
+                                newChaptersCount = allNewChapters.size,
+                                firstChapterTitle = allNewChapters.firstOrNull()?.title
+                            )
+                        }
 
                         notificationDao?.insertNotification(
                             NotificationEntity(

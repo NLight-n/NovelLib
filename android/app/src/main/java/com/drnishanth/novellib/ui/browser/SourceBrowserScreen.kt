@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -168,79 +169,112 @@ fun SourceBrowserScreen(
             }
         },
         floatingActionButton = {
-            AnimatedVisibility(
-                visible = uiState.isNovelDetected,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
-            ) {
-                if (uiState.isRestricted) {
-                    // Restricted by Active Profile Badge
-                    ExtendedFloatingActionButton(
-                        onClick = {
-                            val tagsMsg = uiState.restrictedTags.joinToString(", ")
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    if (tagsMsg.isNotEmpty()) "Novel restricted by profile (tags: $tagsMsg)" else "Novel restricted by current profile"
+            if (uiState.isNovelDetected) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                    exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+                ) {
+                    if (uiState.isRestricted) {
+                        // Restricted by Active Profile Badge
+                        ExtendedFloatingActionButton(
+                            onClick = {
+                                val tagsMsg = uiState.restrictedTags.joinToString(", ")
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar(
+                                        if (tagsMsg.isNotEmpty()) "Novel restricted by profile (tags: $tagsMsg)" else "Novel restricted by current profile"
+                                    )
+                                }
+                            },
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
+                        ) {
+                            Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "Restricted by Profile",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
                                 )
+                                if (uiState.restrictedTags.isNotEmpty()) {
+                                    Text(
+                                        text = "Tag: ${uiState.restrictedTags.first()}",
+                                        fontSize = 10.sp
+                                    )
+                                }
                             }
-                        },
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
-                    ) {
-                        Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
+                        }
+                    } else if (uiState.isInLibrary) {
+                        // Already in Library
+                        ExtendedFloatingActionButton(
+                            onClick = {},
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Restricted by Profile",
-                                fontWeight = FontWeight.Bold,
+                                text = "In Library",
+                                fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
-                            if (uiState.restrictedTags.isNotEmpty()) {
+                        }
+                    } else {
+                        // Ingest Novel Action Button
+                        ExtendedFloatingActionButton(
+                            onClick = { viewModel.importCurrentNovel(webViewRef) },
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
+                        ) {
+                            if (uiState.isImporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Importing...", fontSize = 13.sp)
+                            } else {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Tag: ${uiState.restrictedTags.first()}",
-                                    fontSize = 10.sp
+                                    text = "Add to Library",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp
                                 )
                             }
                         }
                     }
-                } else if (uiState.isInLibrary) {
-                    // Already in Library
+                }
+            } else if (uiState.isChapterDetected) {
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+                    exit = fadeOut() + slideOutVertically(targetOffsetY = { it })
+                ) {
                     ExtendedFloatingActionButton(
-                        onClick = {},
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                    ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "In Library",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 13.sp
-                        )
-                    }
-                } else {
-                    // Ingest Novel Action Button
-                    ExtendedFloatingActionButton(
-                        onClick = { viewModel.importCurrentNovel(webViewRef) },
+                        onClick = { viewModel.saveReadableChapter(webViewRef) },
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
                         elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp)
                     ) {
-                        if (uiState.isImporting) {
+                        if (uiState.isSavingChapter) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(18.dp),
                                 strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Importing...", fontSize = 13.sp)
+                            Text("Saving...", fontSize = 13.sp)
                         } else {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Add to Library",
+                                text = "Save Readable Content",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
                             )

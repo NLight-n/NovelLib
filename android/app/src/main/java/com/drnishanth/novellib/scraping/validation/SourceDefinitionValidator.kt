@@ -68,6 +68,47 @@ object SourceDefinitionValidator {
 
         // 6. Chapter Content Selector
         validateSelector("chapter.content", definition.chapter.content, errors, required = true)
+        if (definition.chapter.contentSelectors.size > 8) {
+            errors.add("chapter.content_selectors cannot contain more than 8 fallback selectors")
+        }
+        definition.chapter.contentSelectors.forEachIndexed { idx, rule ->
+            validateSelector("chapter.content_selectors[$idx]", rule, errors, required = true)
+        }
+
+        // 7. Rendering Rules
+        definition.rendering?.let { rendering ->
+            val allowedModes = setOf("auto", "http_only", "webview_only")
+            if (rendering.mode.lowercase() !in allowedModes) {
+                errors.add("rendering.mode '${rendering.mode}' is invalid. Allowed modes: $allowedModes")
+            }
+            if (rendering.maxWaitMs !in 1_000L..20_000L) {
+                errors.add("rendering.max_wait_ms must be between 1000 and 20000 ms (got ${rendering.maxWaitMs})")
+            }
+            if (rendering.minTextCharacters < 0) {
+                errors.add("rendering.min_text_characters must be >= 0")
+            }
+        }
+
+        // 8. Content Validation Rules
+        definition.chapter.validation?.let { validation ->
+            if (validation.minTextCharacters < 0) {
+                errors.add("chapter.validation.min_text_characters must be >= 0")
+            }
+            if (validation.minParagraphs < 0) {
+                errors.add("chapter.validation.min_paragraphs must be >= 0")
+            }
+            if (validation.maxLinkDensity !in 0.0..1.0) {
+                errors.add("chapter.validation.max_link_density must be between 0.0 and 1.0 (got ${validation.maxLinkDensity})")
+            }
+            if (validation.rejectTitlePatterns.size > 20) {
+                errors.add("chapter.validation.reject_title_patterns cannot exceed 20 patterns")
+            }
+            validation.rejectTitlePatterns.forEachIndexed { idx, pattern ->
+                if (pattern.length > 100) {
+                    errors.add("chapter.validation.reject_title_patterns[$idx] exceeds max length of 100")
+                }
+            }
+        }
 
         return if (errors.isEmpty()) {
             ValidationResult.Valid

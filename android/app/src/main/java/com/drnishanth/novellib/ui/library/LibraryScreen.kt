@@ -1,7 +1,9 @@
 package com.drnishanth.novellib.ui.library
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +30,8 @@ import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SwitchAccount
@@ -47,9 +51,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -96,6 +102,9 @@ fun LibraryScreen(
     val editProfileError by viewModel.editProfileError.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var novelPendingRemoval by remember { mutableStateOf<NovelWithEntry?>(null) }
+    var selectedNovelForActions by remember { mutableStateOf<NovelWithEntry?>(null) }
+    var novelForAddictionTimer by remember { mutableStateOf<NovelWithEntry?>(null) }
+    var lockedNovelNotice by remember { mutableStateOf<NovelWithEntry?>(null) }
     var currentTab by rememberSaveable { mutableStateOf(HomeTab.LIBRARY) }
 
     val sourcesVm: SourcesViewModel = viewModel()
@@ -281,8 +290,16 @@ fun LibraryScreen(
                         items(novels) { novel ->
                             NovelGridCard(
                                 novel = novel,
-                                onClick = { onNovelSelected(novel.id) },
-                                onDelete = { novelPendingRemoval = novel }
+                                onClick = {
+                                    if (novel.lockedUntil > System.currentTimeMillis()) {
+                                        lockedNovelNotice = novel
+                                    } else {
+                                        onNovelSelected(novel.id)
+                                    }
+                                },
+                                onLongClick = {
+                                    selectedNovelForActions = novel
+                                }
                             )
                         }
                     }
@@ -346,6 +363,321 @@ fun LibraryScreen(
                 )
             }
 
+            selectedNovelForActions?.let { novel ->
+                val isLocked = novel.lockedUntil > System.currentTimeMillis()
+                val timerDesc = when {
+                    isLocked -> {
+                        val mins = maxOf(1L, (novel.lockedUntil - System.currentTimeMillis()) / 60000L)
+                        "🔒 Locked (${mins}m cooldown remaining)"
+                    }
+                    novel.addictionLimit > 0 -> "${novel.addictionLimit} chapter(s) per session"
+                    else -> "Limit reading session to curb addiction"
+                }
+
+                AlertDialog(
+                    onDismissRequest = { selectedNovelForActions = null },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (!novel.coverUrl.isNullOrBlank()) {
+                                SubcomposeAsyncImage(
+                                    model = novel.coverUrl,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                            }
+                            Column {
+                                Text(
+                                    novel.title,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    novel.author,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    text = {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            // Option 1: Addiction Timer
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        val target = novel
+                                        selectedNovelForActions = null
+                                        novelForAddictionTimer = target
+                                    },
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HourglassTop,
+                                        contentDescription = "Addiction Timer",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            "Addiction timer",
+                                            fontWeight = FontWeight.SemiBold,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Text(
+                                            timerDesc,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Option 2: Delete
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        val target = novel
+                                        selectedNovelForActions = null
+                                        novelPendingRemoval = target
+                                    },
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = "Delete",
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            "Delete",
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.error,
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Text(
+                                            "Remove from library and manage downloads",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {},
+                    dismissButton = {
+                        TextButton(onClick = { selectedNovelForActions = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            novelForAddictionTimer?.let { novel ->
+                var limitInput by remember { mutableStateOf(if (novel.addictionLimit > 0) novel.addictionLimit.toString() else "") }
+                var selectedOption by remember { mutableStateOf(novel.addictionLimit) }
+                val isLocked = novel.lockedUntil > System.currentTimeMillis()
+
+                AlertDialog(
+                    onDismissRequest = { novelForAddictionTimer = null },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.HourglassTop, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Addiction Timer")
+                        }
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Novel: \"${novel.title}\"",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Set a chapter limit for this reading session. When reached, this novel locks for 1 hour. Other novels will remain open.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            if (isLocked) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                val mins = maxOf(1L, (novel.lockedUntil - System.currentTimeMillis()) / 60000L)
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                "Locked (${mins}m remaining)",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.error,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                viewModel.resetAddictionTimer(novel.id)
+                                                novelForAddictionTimer = null
+                                            }
+                                        ) {
+                                            Text("Unlock Now", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text("Session Chapter Limit:", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            val presets = listOf(
+                                0 to "Off (Unlimited)",
+                                1 to "1 Chapter",
+                                2 to "2 Chapters",
+                                3 to "3 Chapters",
+                                5 to "5 Chapters"
+                            )
+                            presets.forEach { (count, label) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            selectedOption = count
+                                            limitInput = if (count > 0) count.toString() else ""
+                                        }
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selectedOption == count,
+                                        onClick = {
+                                            selectedOption = count
+                                            limitInput = if (count > 0) count.toString() else ""
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(label, style = MaterialTheme.typography.bodyMedium)
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = limitInput,
+                                onValueChange = { input ->
+                                    val digits = input.filter { it.isDigit() }
+                                    limitInput = digits
+                                    val parsed = digits.toIntOrNull() ?: 0
+                                    selectedOption = parsed
+                                },
+                                label = { Text("Custom chapter limit") },
+                                placeholder = { Text("e.g. 2") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val finalLimit = limitInput.toIntOrNull() ?: selectedOption
+                                viewModel.setAddictionLimit(novel.id, finalLimit)
+                                novelForAddictionTimer = null
+                            }
+                        ) {
+                            Text("Save")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { novelForAddictionTimer = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            lockedNovelNotice?.let { novel ->
+                val mins = maxOf(1L, (novel.lockedUntil - System.currentTimeMillis()) / 60000L)
+                AlertDialog(
+                    onDismissRequest = { lockedNovelNotice = null },
+                    icon = {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(36.dp))
+                    },
+                    title = { Text("Novel Locked", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text(
+                                text = "\"${novel.title}\" is locked by your Addiction Timer.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "You've reached your reading limit of ${novel.addictionLimit} chapter(s). Cooldown ends in approximately $mins minute(s).",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Take a break and let your mind rest! Other novels in your library are still open to read.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(onClick = { lockedNovelNotice = null }) {
+                            Text("Take a Break")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                val target = novel
+                                lockedNovelNotice = null
+                                novelForAddictionTimer = target
+                            }
+                        ) {
+                            Text("Adjust Timer")
+                        }
+                    }
+                )
+            }
+
             if (showEditProfile && activeProfile != null) {
                 EditProfileDialog(
                     profile = activeProfile!!,
@@ -368,16 +700,23 @@ fun LibraryScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun NovelGridCard(
     novel: NovelWithEntry,
     onClick: () -> Unit,
-    onDelete: () -> Unit = {}
+    onLongClick: () -> Unit
 ) {
+    val isLocked = novel.lockedUntil > System.currentTimeMillis()
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clip(RoundedCornerShape(8.dp))
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            ),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -422,20 +761,64 @@ fun NovelGridCard(
                     )
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(2.dp)
-                        .size(24.dp)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f), CircleShape)
-                ) {
-                    Icon(
-                        Icons.Default.DeleteOutline,
-                        contentDescription = "Remove from Library",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(14.dp)
-                    )
+                // Lock or addiction timer indicator overlay (Delete button moved to long-press options list)
+                if (isLocked) {
+                    val remainingMins = maxOf(1L, (novel.lockedUntil - System.currentTimeMillis()) / 60000L)
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.95f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = "Locked",
+                                tint = MaterialTheme.colorScheme.onErrorContainer,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "${remainingMins}m",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+                } else if (novel.addictionLimit > 0) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(4.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.HourglassTop,
+                                contentDescription = "Timer Set",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                text = "${novel.addictionLimit}ch",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             }
 

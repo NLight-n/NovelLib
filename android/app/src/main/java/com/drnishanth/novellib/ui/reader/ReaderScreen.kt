@@ -18,9 +18,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -29,6 +36,7 @@ import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
@@ -40,7 +48,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -83,7 +90,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun ReaderScreen(
     viewModel: ReaderViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onOpenSourceBrowser: ((url: String) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val prefs = uiState.preferences
@@ -108,13 +116,29 @@ fun ReaderScreen(
             }
     }
 
-    // Scroll to initial saved position when chapter loads
-    LaunchedEffect(uiState.initialScrollIndex) {
-        if (prefs.pageNavigationMode == "scroll" &&
-            uiState.initialScrollIndex > 0 &&
-            uiState.initialScrollIndex < uiState.paragraphs.size
-        ) {
-            listState.scrollToItem(uiState.initialScrollIndex)
+    // Reset/restore scroll position whenever chapter changes
+    // If user has saved progress in this chapter (> 0), restore it; otherwise scroll to 0 (top of new chapter)
+    LaunchedEffect(uiState.currentChapter?.id) {
+        if (uiState.currentChapter?.id == null) return@LaunchedEffect
+        if (prefs.pageNavigationMode == "scroll") {
+            val target = if (uiState.initialScrollIndex in uiState.paragraphs.indices) {
+                uiState.initialScrollIndex
+            } else {
+                0
+            }
+            listState.scrollToItem(target)
+        }
+    }
+
+    // Scroll to initial saved position when chapter finishes loading paragraphs
+    LaunchedEffect(uiState.initialScrollIndex, uiState.paragraphs.size) {
+        if (prefs.pageNavigationMode == "scroll" && uiState.paragraphs.isNotEmpty()) {
+            val target = if (uiState.initialScrollIndex in uiState.paragraphs.indices) {
+                uiState.initialScrollIndex
+            } else {
+                0
+            }
+            listState.scrollToItem(target)
         }
     }
 
@@ -142,7 +166,7 @@ fun ReaderScreen(
             MaterialTheme.colorScheme.onBackground
         }
 
-        Scaffold(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .focusRequester(focusRequester)
@@ -163,80 +187,13 @@ fun ReaderScreen(
                     } else {
                         false
                     }
-                },
-            topBar = {
-                if (uiState.showControls) {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(
-                                    text = uiState.currentChapter?.title ?: "Reader",
-                                    maxLines = 1,
-                                    style = MaterialTheme.typography.titleMedium
-                                )
-                                if (uiState.isEInkDevice) {
-                                    Text(
-                                        text = "E-Ink Mode Active",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = onBack) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        actions = {
-                            // E-Ink Manual Full-Screen Refresh Button
-                            IconButton(onClick = { viewModel.triggerScreenRefresh(context, view) }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh E-Ink Display")
-                            }
-
-                            val isDownloaded = uiState.currentChapter?.downloadState == "available"
-                            IconButton(
-                                onClick = {
-                                    if (isDownloaded) {
-                                        viewModel.deleteCurrentChapter()
-                                    } else {
-                                        viewModel.downloadCurrentChapter()
-                                    }
-                                }
-                            ) {
-                                if (isDownloaded) {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = "Downloaded", tint = MaterialTheme.colorScheme.primary)
-                                } else {
-                                    Icon(Icons.Default.Download, contentDescription = "Download Chapter")
-                                }
-                            }
-                            IconButton(onClick = { showSettingsSheet = true }) {
-                                Icon(Icons.Default.Tune, contentDescription = "Reader Settings")
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        )
-                    )
                 }
-            },
-            bottomBar = {
-                if (uiState.showControls) {
-                    ReaderControlsBottomBar(
-                        preferences = prefs,
-                        isEInkDevice = uiState.isEInkDevice,
-                        onThemeChanged = { viewModel.updateTheme(it) },
-                        onFontSizeChanged = { viewModel.updateFontSize(it) },
-                        onTextBrightnessChanged = { viewModel.updateTextBrightness(it) },
-                        onManualRefresh = { viewModel.triggerScreenRefresh(context, view) }
-                    )
-                }
-            }
-        ) { padding ->
+        ) {
+            // LAYER 1: Content Layer (Stationary, stable layout bounds)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background)
             ) {
                 if (uiState.isLoading) {
                     CircularProgressIndicator(
@@ -244,7 +201,36 @@ fun ReaderScreen(
                             .size(36.dp)
                             .align(Alignment.Center)
                     )
+                } else if (uiState.isAddictionLocked) {
+                    AddictionLockoutScreen(
+                        novelTitle = uiState.novelTitle,
+                        limit = uiState.addictionLimit,
+                        lockedUntil = uiState.lockedUntil,
+                        onBack = onBack,
+                        onExpired = { viewModel.onLockoutExpired() }
+                    )
                 } else if (uiState.errorMessage != null) {
+                    val reason = uiState.failureReason
+                    val isActionRequired = reason == com.drnishanth.novellib.scraping.models.ExtractionFailureReason.AUTH_REQUIRED ||
+                            reason == com.drnishanth.novellib.scraping.models.ExtractionFailureReason.CHALLENGE
+                    val isLayoutChanged = reason == com.drnishanth.novellib.scraping.models.ExtractionFailureReason.CONTENT_INVALID
+
+                    val titleText = when (reason) {
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.AUTH_REQUIRED -> "Authentication Required"
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.CHALLENGE -> "Verification Required"
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.CONTENT_INVALID -> "Layout Changed"
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.TIMEOUT, com.drnishanth.novellib.scraping.models.ExtractionFailureReason.NETWORK -> "Network Unavailable"
+                        else -> "Error Loading Chapter"
+                    }
+
+                    val userMessage = when (reason) {
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.AUTH_REQUIRED -> "This source needs an active sign-in session."
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.CHALLENGE -> "This source requires browser verification (CAPTCHA / Cloudflare)."
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.CONTENT_INVALID -> "The source page layout may have changed. You can retry with a rendered page."
+                        com.drnishanth.novellib.scraping.models.ExtractionFailureReason.TIMEOUT, com.drnishanth.novellib.scraping.models.ExtractionFailureReason.NETWORK -> "Could not reach this chapter. Check your connection and retry."
+                        else -> uiState.errorMessage ?: "Failed to load chapter content."
+                    }
+
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -252,22 +238,46 @@ fun ReaderScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
+                        Icon(
+                            imageVector = when {
+                                isActionRequired -> Icons.Default.Lock
+                                isLayoutChanged -> Icons.Default.Tune
+                                else -> Icons.Default.Refresh
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Error loading chapter",
+                            text = titleText,
                             style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = uiState.errorMessage ?: "",
+                            text = userMessage,
                             style = MaterialTheme.typography.bodyMedium,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = {
-                            uiState.currentChapter?.let { viewModel.loadChapter(it.id) }
-                        }) {
-                            Text("Retry")
+                        Spacer(modifier = Modifier.height(20.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Button(onClick = {
+                                uiState.currentChapter?.let { viewModel.loadChapter(it.id) }
+                            }) {
+                                Text("Retry")
+                            }
+                            if (isActionRequired || onOpenSourceBrowser != null) {
+                                OutlinedButton(onClick = {
+                                    val sourceUrl = uiState.currentChapter?.sourceUrl
+                                    if (!sourceUrl.isNullOrBlank()) {
+                                        onOpenSourceBrowser?.invoke(sourceUrl)
+                                    }
+                                }) {
+                                    Text("Open in Browser")
+                                }
+                            }
                         }
                     }
                 } else {
@@ -285,9 +295,14 @@ fun ReaderScreen(
                         // Continuous Scroll Layout
                         LazyColumn(
                             state = listState,
+                            contentPadding = PaddingValues(
+                                top = 72.dp, // Stable safe margin at top so text starts below top bar area
+                                bottom = 96.dp, // Stable safe margin at bottom so next/prev buttons clear bottom bar area
+                                start = prefs.margins.dp,
+                                end = prefs.margins.dp
+                            ),
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = prefs.margins.dp, vertical = 12.dp)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null
@@ -354,32 +369,124 @@ fun ReaderScreen(
                         }
                     }
                 }
+            }
 
-                // Electrophoretic Clear-Flash Overlay
-                // Momentarily flashes solid black to clear pigment ghosting on E-Ink panels
-                if (uiState.isPageRefreshFlashing) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black)
+            // LAYER 2: Top Bar Floating Overlay
+            AnimatedVisibility(
+                visible = uiState.showControls,
+                enter = slideInVertically { -it } + fadeIn(),
+                exit = slideOutVertically { -it } + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    tonalElevation = 6.dp,
+                    shadowElevation = 4.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text(
+                                    text = uiState.currentChapter?.title ?: "Reader",
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                if (uiState.isEInkDevice) {
+                                    Text(
+                                        text = "E-Ink Mode Active",
+                                        fontSize = 10.sp,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        },
+                        navigationIcon = {
+                            IconButton(onClick = onBack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        actions = {
+                            // E-Ink Manual Full-Screen Refresh Button
+                            IconButton(onClick = { viewModel.triggerScreenRefresh(context, view) }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh E-Ink Display")
+                            }
+
+                            val isDownloaded = uiState.currentChapter?.downloadState == "available"
+                            IconButton(
+                                onClick = {
+                                    if (isDownloaded) {
+                                        viewModel.deleteCurrentChapter()
+                                    } else {
+                                        viewModel.downloadCurrentChapter()
+                                    }
+                                }
+                            ) {
+                                if (isDownloaded) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = "Downloaded", tint = MaterialTheme.colorScheme.primary)
+                                } else {
+                                    Icon(Icons.Default.Download, contentDescription = "Download Chapter")
+                                }
+                            }
+                            IconButton(onClick = { showSettingsSheet = true }) {
+                                Icon(Icons.Default.Tune, contentDescription = "Reader Settings")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = Color.Transparent
+                        )
                     )
                 }
+            }
 
-                // Advanced Reader Settings Sheet
-                if (showSettingsSheet) {
-                    ReaderSettingsBottomSheet(
+            // LAYER 3: Bottom Bar Floating Overlay
+            AnimatedVisibility(
+                visible = uiState.showControls,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    tonalElevation = 6.dp,
+                    shadowElevation = 8.dp,
+                    shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    ReaderControlsBottomBar(
                         preferences = prefs,
                         isEInkDevice = uiState.isEInkDevice,
-                        batteryStatus = uiState.batteryStatus,
-                        onDismiss = { showSettingsSheet = false },
-                        onFontFamilySelected = { viewModel.updateFontFamily(it) },
-                        onLineHeightSelected = { viewModel.updateLineHeight(it) },
-                        onNavigationModeSelected = { viewModel.updateNavigationMode(it) },
-                        onRefreshIntervalSelected = { viewModel.updateRefreshInterval(it) },
-                        onVolumeKeysToggle = { viewModel.updateVolumeKeysNavigation(it) },
-                        onTextBrightnessSelected = { viewModel.updateTextBrightness(it) }
+                        onThemeChanged = { viewModel.updateTheme(it) },
+                        onFontSizeChanged = { viewModel.updateFontSize(it) },
+                        onTextBrightnessChanged = { viewModel.updateTextBrightness(it) },
+                        onManualRefresh = { viewModel.triggerScreenRefresh(context, view) }
                     )
                 }
+            }
+
+            // Electrophoretic Clear-Flash Overlay
+            if (uiState.isPageRefreshFlashing) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                )
+            }
+
+            // Advanced Reader Settings Sheet
+            if (showSettingsSheet) {
+                ReaderSettingsBottomSheet(
+                    preferences = prefs,
+                    isEInkDevice = uiState.isEInkDevice,
+                    batteryStatus = uiState.batteryStatus,
+                    onDismiss = { showSettingsSheet = false },
+                    onFontFamilySelected = { viewModel.updateFontFamily(it) },
+                    onLineHeightSelected = { viewModel.updateLineHeight(it) },
+                    onNavigationModeSelected = { viewModel.updateNavigationMode(it) },
+                    onRefreshIntervalSelected = { viewModel.updateRefreshInterval(it) },
+                    onVolumeKeysToggle = { viewModel.updateVolumeKeysNavigation(it) },
+                    onTextBrightnessSelected = { viewModel.updateTextBrightness(it) }
+                )
             }
         }
     }
@@ -856,6 +963,127 @@ fun ReaderSettingsBottomSheet(
             }
 
             Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun AddictionLockoutScreen(
+    novelTitle: String,
+    limit: Int,
+    lockedUntil: Long,
+    onBack: () -> Unit,
+    onExpired: () -> Unit
+) {
+    var remainingMs by remember(lockedUntil) {
+        mutableStateOf(maxOf(0L, lockedUntil - System.currentTimeMillis()))
+    }
+
+    LaunchedEffect(lockedUntil) {
+        while (remainingMs > 0L) {
+            kotlinx.coroutines.delay(1000L)
+            remainingMs = maxOf(0L, lockedUntil - System.currentTimeMillis())
+        }
+        onExpired()
+    }
+
+    val totalSeconds = (remainingMs / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    val timeFormatted = String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Lock,
+                contentDescription = "Locked",
+                modifier = Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Reading Limit Reached",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = if (novelTitle.isNotBlank()) {
+                "You've reached your session limit of $limit chapter(s) for \"$novelTitle\"."
+            } else {
+                "You've reached your session limit of $limit chapter(s) for this novel."
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.padding(horizontal = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Novel unlocks in",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = timeFormatted,
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = "Take a break and let your mind unwind!\nOther novels in your library remain accessible.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.outline,
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Button(
+            onClick = onBack,
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Back to Library")
         }
     }
 }

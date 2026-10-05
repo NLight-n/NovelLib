@@ -7,30 +7,77 @@ import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.drnishanth.novellib.scraping.models.FetchMethod
+import com.drnishanth.novellib.scraping.models.FetchedDocument
+import com.drnishanth.novellib.scraping.models.RenderingRule
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import kotlin.coroutines.resume
 
 /**
  * Headless WebView fetcher used as a fallback when programmatic OkHttp requests
- * are challenged by Cloudflare or bot protection (e.g. HTTP 403 Forbidden).
- * Executes JavaScript and retrieves the fully rendered DOM with valid clearance cookies.
+ * are challenged by Cloudflare/WAF or when client-side JavaScript rendering is required.
+ *
+ * Implements:
+ * - Mutex serialization to ensure only one headless WebView runs at a time.
+ * - Readiness polling against configured selectors and text thresholds.
+ * - Challenge detection during hydration.
+ * - Reliable cleanup on main looper across cancellation and timeouts.
  */
 object WebViewDocumentFetcher {
 
-    suspend fun fetchDocument(
+    private val fetcherMutex = Mutex()
+
+    suspend fun fetchDocumentDetailed(
         context: Context,
         url: String,
-        timeoutMs: Long = 14000L
-    ): Document? {
-        val html: String? = withTimeoutOrNull(timeoutMs) {
-            suspendCancellableCoroutine<String?> { continuation ->
+        renderingRule: RenderingRule? = null
+    ): FetchedDocument? = fetcherMutex.withLock {
+        val maxWaitMs = renderingRule?.maxWaitMs ?: 12_000L
+        val minChars = renderingRule?.minTextCharacters ?: 300
+        val readySelector = renderingRule?.readySelector
+        val scrollUntilStable = renderingRule?.scrollUntilStable ?: false
+
+        val startTime = System.currentTimeMillis()
+
+        val htmlResult: String? = withTimeoutOrNull(maxWaitMs + 2_000L) {
+            suspendCancellableCoroutine { continuation ->
                 Handler(Looper.getMainLooper()).post {
                     var webView: WebView? = null
+                    var isFinished = false
+                    val mainHandler = Handler(Looper.getMainLooper())
+                    var pollRunnable: Runnable? = null
+
+                    fun cleanup() {
+                        pollRunnable?.let { mainHandler.removeCallbacks(it) }
+                        try {
+                            webView?.stopLoading()
+                            webView?.loadUrl("about:blank")
+                            webView?.destroy()
+                        } catch (_: Exception) {}
+                        webView = null
+                    }
+
+                    fun finishWithHtml(html: String) {
+                        if (!isFinished && continuation.isActive) {
+                            isFinished = true
+                            continuation.resume(html)
+                        }
+                        cleanup()
+                    }
+
+                    continuation.invokeOnCancellation {
+                        mainHandler.post { cleanup() }
+                    }
+
                     try {
                         webView = WebView(context.applicationContext).apply {
                             settings.apply {
@@ -45,67 +92,92 @@ object WebViewDocumentFetcher {
                             cm.setAcceptCookie(true)
                             cm.setAcceptThirdPartyCookies(this, true)
 
-                            var resumed = false
-
-                            fun finishWithHtml(content: String) {
-                                if (!resumed && continuation.isActive) {
-                                    resumed = true
-                                    continuation.resume(content)
-                                }
-                                try {
-                                    stopLoading()
-                                    destroy()
-                                } catch (_: Exception) {}
-                            }
-
                             webViewClient = object : WebViewClient() {
+                                private var pageLoaded = false
+
                                 override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                                     super.onPageFinished(view, finishedUrl)
-                                    // Wait brief moment for Cloudflare/JS challenge or hydration to finalize
-                                    view?.postDelayed({
-                                        view.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
-                                            if (result != null && result != "null" && result.length > 50) {
-                                                val unquoted = try {
+                                    if (pageLoaded) return
+                                    pageLoaded = true
+
+                                    val selectorJson = JSONObject.quote(readySelector ?: "")
+
+                                    val checkJs = """
+                                        (function() {
+                                            var targetSel = $selectorJson;
+                                            var elReady = targetSel.length > 0 ? (document.querySelector(targetSel) !== null) : true;
+                                            var bodyText = document.body ? (document.body.innerText || '') : '';
+                                            var textLen = bodyText.trim().length;
+                                            var title = document.title || '';
+                                            var challengeRegex = /just a moment|checking your browser|cf-browser-verification|verify you are human|access denied/i;
+                                            var isChallenge = challengeRegex.test(title) || (textLen < 600 && challengeRegex.test(bodyText));
+                                            return JSON.stringify({
+                                                ready: elReady && textLen >= $minChars && !isChallenge,
+                                                isChallenge: isChallenge,
+                                                textLen: textLen,
+                                                title: title
+                                            });
+                                        })();
+                                    """.trimIndent()
+
+                                    fun captureOuterHtml() {
+                                        view?.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
+                                            val unquoted = try {
+                                                if (result != null && result.startsWith("\"") && result.endsWith("\"")) {
                                                     org.json.JSONTokener(result).nextValue() as? String ?: result
-                                                } catch (_: Exception) {
-                                                    result
-                                                }
-                                                // If still in a challenge interstitial, wait slightly longer
-                                                if (unquoted.contains("Just a moment...") || unquoted.contains("Checking your browser")) {
-                                                    view.postDelayed({
-                                                        view.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { r2 ->
-                                                            val u2 = try {
-                                                                org.json.JSONTokener(r2 ?: "").nextValue() as? String ?: (r2 ?: "")
-                                                            } catch (_: Exception) {
-                                                                r2 ?: ""
-                                                            }
-                                                            finishWithHtml(u2)
-                                                        }
-                                                    }, 2000)
                                                 } else {
-                                                    finishWithHtml(unquoted)
+                                                    result ?: ""
+                                                }
+                                            } catch (_: Exception) {
+                                                result ?: ""
+                                            }
+                                            finishWithHtml(unquoted)
+                                        }
+                                    }
+
+                                    var attempts = 0
+                                    val maxAttempts = ((maxWaitMs - 1000L).coerceAtLeast(3000L) / 300L).toInt()
+
+                                    pollRunnable = object : Runnable {
+                                        override fun run() {
+                                            if (isFinished || webView == null) return
+                                            attempts++
+
+                                            view?.evaluateJavascript(checkJs) { checkResult ->
+                                                if (isFinished || webView == null) return@evaluateJavascript
+                                                var isReady = false
+                                                try {
+                                                    val cleanResult = if (checkResult != null && checkResult.startsWith("\"") && checkResult.endsWith("\"")) {
+                                                        org.json.JSONTokener(checkResult).nextValue() as? String ?: checkResult
+                                                    } else {
+                                                        checkResult ?: ""
+                                                    }
+                                                    val jsonObj = JSONObject(cleanResult)
+                                                    isReady = jsonObj.optBoolean("ready", false)
+                                                } catch (_: Exception) {}
+
+                                                if (isReady || attempts >= maxAttempts) {
+                                                    if (scrollUntilStable && isReady) {
+                                                        view.evaluateJavascript("window.scrollBy(0, 800);", null)
+                                                        mainHandler.postDelayed({ captureOuterHtml() }, 500)
+                                                    } else {
+                                                        captureOuterHtml()
+                                                    }
+                                                } else {
+                                                    mainHandler.postDelayed(this, 300)
                                                 }
                                             }
                                         }
-                                    }, 1000)
-                                }
-                            }
+                                    }
 
-                            continuation.invokeOnCancellation {
-                                Handler(Looper.getMainLooper()).post {
-                                    try {
-                                        stopLoading()
-                                        destroy()
-                                    } catch (_: Exception) {}
+                                    mainHandler.postDelayed(pollRunnable!!, 300)
                                 }
                             }
 
                             loadUrl(url)
                         }
                     } catch (e: Exception) {
-                        try {
-                            webView?.destroy()
-                        } catch (_: Exception) {}
+                        cleanup()
                         if (continuation.isActive) {
                             continuation.resume(null)
                         }
@@ -113,14 +185,34 @@ object WebViewDocumentFetcher {
                 }
             }
         }
-        if (html.isNullOrBlank()) return null
 
-        return withContext(Dispatchers.Default) {
+        if (htmlResult.isNullOrBlank()) return@withLock null
+
+        val elapsed = System.currentTimeMillis() - startTime
+        withContext(Dispatchers.Default) {
             try {
-                Jsoup.parse(html, url)
+                val doc = Jsoup.parse(htmlResult, url)
+                FetchedDocument(
+                    document = doc,
+                    finalUrl = url,
+                    fetchMethod = FetchMethod.WEBVIEW,
+                    elapsedMs = elapsed
+                )
             } catch (e: Exception) {
                 null
             }
         }
+    }
+
+    /**
+     * Backward-compatible convenience wrapper returning Document? directly.
+     */
+    suspend fun fetchDocument(
+        context: Context,
+        url: String,
+        timeoutMs: Long = 14000L
+    ): Document? {
+        val rule = RenderingRule(maxWaitMs = timeoutMs)
+        return fetchDocumentDetailed(context, url, rule)?.document
     }
 }

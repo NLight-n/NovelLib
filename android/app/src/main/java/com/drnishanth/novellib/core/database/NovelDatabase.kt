@@ -46,7 +46,7 @@ import com.drnishanth.novellib.core.database.entities.UserProfileEntity
         TagEntity::class,
         NovelTagCrossRef::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -120,6 +120,14 @@ abstract class NovelDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `library_entries` ADD COLUMN `addiction_limit` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `library_entries` ADD COLUMN `session_chapters_read` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `library_entries` ADD COLUMN `locked_until` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): NovelDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -127,7 +135,7 @@ abstract class NovelDatabase : RoomDatabase() {
                     NovelDatabase::class.java,
                     "novellib.db"
                 )
-                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance

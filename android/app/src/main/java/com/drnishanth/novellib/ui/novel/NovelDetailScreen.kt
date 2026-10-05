@@ -129,7 +129,8 @@ enum class NovelDetailTab(val title: String, val icon: ImageVector) {
 fun NovelDetailScreen(
     viewModel: NovelDetailViewModel,
     onBack: () -> Unit,
-    onOpenChapter: (chapterId: String) -> Unit = {}
+    onOpenChapter: (chapterId: String) -> Unit = {},
+    onOpenBrowser: ((url: String) -> Unit)? = null
 ) {
     val novel by viewModel.novel.collectAsState()
     val chapters by viewModel.chapters.collectAsState()
@@ -203,7 +204,7 @@ fun NovelDetailScreen(
         }
     }
 
-    val showBottomBar = pagerState.currentPage != 2 || readerUiState.showControls
+    val showBottomBar = pagerState.currentPage != 2
 
     Scaffold(
         topBar = {
@@ -255,11 +256,7 @@ fun NovelDetailScreen(
             }
         },
         bottomBar = {
-            AnimatedVisibility(
-                visible = showBottomBar,
-                enter = slideInVertically { it } + fadeIn(),
-                exit = slideOutVertically { it } + fadeOut()
-            ) {
+            if (showBottomBar) {
                 NavigationBar {
                     NovelDetailTab.values().forEachIndexed { index, tab ->
                         NavigationBarItem(
@@ -277,9 +274,7 @@ fun NovelDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
+            modifier = Modifier.fillMaxSize()
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -293,6 +288,7 @@ fun NovelDetailScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .padding(padding)
                                 .verticalScroll(scrollState)
                                 .padding(16.dp)
                         ) {
@@ -538,7 +534,11 @@ fun NovelDetailScreen(
 
                     1 -> {
                         // TAB 1: CHAPTERS LIST WITH HORIZONTAL SLIDER
-                        Column(modifier = Modifier.fillMaxSize()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(padding)
+                        ) {
                             // Top Chapters Control Bar
                             Surface(
                                 tonalElevation = 2.dp,
@@ -660,7 +660,8 @@ fun NovelDetailScreen(
                                 viewModel = readerViewModel,
                                 onBack = {
                                     coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                                }
+                                },
+                                onOpenSourceBrowser = onOpenBrowser
                             )
 
                             if (readerUiState.isLoading) {

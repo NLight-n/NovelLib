@@ -23,7 +23,10 @@ data class NovelWithEntry(
     val status: String,
     val addedAt: Long,
     val lastOpenedAt: Long?,
-    val downloadMode: String
+    val downloadMode: String,
+    val addictionLimit: Int = 0,
+    val sessionChaptersRead: Int = 0,
+    val lockedUntil: Long = 0L
 )
 
 @Dao
@@ -31,7 +34,10 @@ interface NovelDao {
     @Query("""
         SELECT n.id, n.title, n.author, n.description, n.cover_url AS coverUrl, 
                n.status, l.added_at AS addedAt, l.last_opened_at AS lastOpenedAt, 
-               l.download_mode AS downloadMode
+               l.download_mode AS downloadMode,
+               l.addiction_limit AS addictionLimit,
+               l.session_chapters_read AS sessionChaptersRead,
+               l.locked_until AS lockedUntil
         FROM novels n
         INNER JOIN library_entries l ON n.id = l.novel_id
         WHERE l.profile_id = :profileId
@@ -42,7 +48,10 @@ interface NovelDao {
     @Query("""
         SELECT n.id, n.title, n.author, n.description, n.cover_url AS coverUrl, 
                n.status, l.added_at AS addedAt, l.last_opened_at AS lastOpenedAt, 
-               l.download_mode AS downloadMode
+               l.download_mode AS downloadMode,
+               l.addiction_limit AS addictionLimit,
+               l.session_chapters_read AS sessionChaptersRead,
+               l.locked_until AS lockedUntil
         FROM novels n
         INNER JOIN library_entries l ON n.id = l.novel_id
         WHERE l.profile_id = :profileId
@@ -188,4 +197,13 @@ interface NovelDao {
 
     @Query("UPDATE library_entries SET notifications_enabled = :enabled WHERE profile_id = :profileId AND novel_id = :novelId")
     suspend fun updateNotificationPreference(profileId: String, novelId: String, enabled: Boolean)
+
+    @Query("UPDATE library_entries SET addiction_limit = :limit, session_chapters_read = 0, locked_until = 0 WHERE profile_id = :profileId AND novel_id = :novelId")
+    suspend fun updateAddictionLimit(profileId: String, novelId: String, limit: Int)
+
+    @Query("UPDATE library_entries SET session_chapters_read = :chaptersRead, locked_until = :lockedUntil WHERE profile_id = :profileId AND novel_id = :novelId")
+    suspend fun updateAddictionSession(profileId: String, novelId: String, chaptersRead: Int, lockedUntil: Long)
+
+    @Query("UPDATE library_entries SET session_chapters_read = 0, locked_until = 0 WHERE profile_id = :profileId AND novel_id = :novelId")
+    suspend fun resetAddictionSession(profileId: String, novelId: String)
 }

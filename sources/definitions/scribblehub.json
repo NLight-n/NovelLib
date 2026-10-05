@@ -1,8 +1,8 @@
 {
   "id": "scribblehub",
-  "version": 2,
+  "version": 4,
   "name": "Scribble Hub",
-  "description": "Original web stories, community fiction, and serialized light novels",
+  "description": "Scribble Hub original web fiction community",
   "minimum_engine_version": 1,
   "match": {
     "hosts": [
@@ -25,46 +25,53 @@
       }
     }
   },
+  "rendering": {
+    "mode": "auto",
+    "ready_selector": "div.chp_raw",
+    "min_text_characters": 300,
+    "max_wait_ms": 12000,
+    "scroll_until_stable": false
+  },
   "novel": {
     "title": {
-      "selector": "h1.fic_title, .fic_title",
+      "selector": ".fic_title, h1.fic_title, h1",
       "type": "text",
       "transform": ["trim"]
     },
     "author": {
-      "selector": "span.auth_name_fic a, span.auth_name_fic",
+      "selector": "span.auth_name_fic a, span.auth_name_fic, .auth_name_fic",
       "type": "text",
       "transform": ["trim"]
     },
     "description": {
-      "selector": ".wi_fic_desc, .fic_desc",
+      "selector": "div.wi_fic_desc, .wi_fic_desc",
       "type": "html",
       "transform": ["trim"]
     },
     "cover": {
-      "selector": ".fic_image img",
+      "selector": "div.fic_image img, .fic_image img, img.fic_image",
       "type": "attribute",
       "attribute": "src",
       "transform": ["absolute_url"]
     },
     "status": {
-      "selector": "span.rnd_status",
+      "selector": "span.widget_fic_similar",
       "type": "text",
       "transform": ["trim"]
     },
     "tags": {
-      "selector": ".fic_genre, .fic_genre a, .stag, .stag a, a.stag",
+      "selector": "span.wi_fic_genre a, a.fic_genre, span.tags a",
       "attribute": "text",
       "transform": "trim"
     },
-    "content_warnings": {
+    "contentWarnings": {
       "selector": ".raw_warning, .raw_warning a, .content_warning a, .warning_list li",
       "attribute": "text",
       "transform": "trim"
     }
   },
   "chapters": {
-    "container": "ul.toc_w li.toc_li, .toc_li, ul.toc_w li",
+    "container": "ul.toc_w li.toc_li, .toc_li, ul.toc_w li, a.toc_a, #novellib-injected-toc a.toc_a, #novellib-injected-toc li",
     "title": {
       "selector": "a.toc_a, a",
       "type": "text",
@@ -86,6 +93,35 @@
     "content": {
       "selector": "div.chp_raw, .chp_raw, #chp_raw",
       "type": "html"
+    },
+    "content_selectors": [
+      {
+        "selector": "div.chp_raw",
+        "type": "html"
+      },
+      {
+        "selector": "#chp_raw",
+        "type": "html"
+      },
+      {
+        "selector": ".chp_raw",
+        "type": "html"
+      },
+      {
+        "selector": "article",
+        "type": "html"
+      }
+    ],
+    "validation": {
+      "min_text_characters": 300,
+      "min_paragraphs": 2,
+      "max_link_density": 0.35,
+      "reject_title_patterns": [
+        "just a moment",
+        "checking your browser",
+        "access denied",
+        "verify you are human"
+      ]
     },
     "sanitize": {
       "remove_tags": ["script", "style", "iframe", "button"],

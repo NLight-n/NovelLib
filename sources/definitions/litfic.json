@@ -1,8 +1,8 @@
 {
   "id": "litfic",
-  "version": 2,
+  "version": 4,
   "name": "LitFic",
-  "description": "Serialized modern fiction, web novels, and original community stories",
+  "description": "LitFic independent web fiction and novel platform",
   "minimum_engine_version": 1,
   "match": {
     "hosts": [
@@ -10,12 +10,10 @@
       "www.litfic.com"
     ],
     "url_patterns": [
-      "https://litfic.com/series/*",
-      "https://www.litfic.com/series/*",
-      "https://litfic.com/browse*",
-      "https://www.litfic.com/browse*"
+      "https://litfic.com/*",
+      "https://www.litfic.com/*"
     ],
-    "novel_url_pattern": "https://litfic.com/series/*"
+    "novel_url_pattern": "https://(?:www\\.)?litfic\\.com/series/[^/]+$"
   },
   "requests": {
     "default": {
@@ -25,39 +23,46 @@
       }
     }
   },
+  "rendering": {
+    "mode": "auto",
+    "ready_selector": "div.reader-content, article, div[class*='reader']",
+    "min_text_characters": 300,
+    "max_wait_ms": 12000,
+    "scroll_until_stable": false
+  },
   "novel": {
     "title": {
-      "selector": "main h1, h1, meta[property='og:title']",
+      "selector": "main h1, h1.font-display, h1, meta[property='og:title'], title",
       "type": "text",
       "transform": ["trim"]
     },
     "author": {
-      "selector": "a[href*='/profile/'], a[href*='/author/'], .text-flame",
+      "selector": "a[href*='/author/'], a[href*='/user/'], .author-name, span.font-medium",
       "type": "text",
       "transform": ["trim"]
     },
     "description": {
-      "selector": ".prose, .reader-content, p",
+      "selector": "div[class*='description'], div[class*='synopsis'], .prose",
       "type": "html",
       "transform": ["trim"]
     },
     "cover": {
-      "selector": "img[src*='covers'], img[src*='firebasestorage'], .relative img, img",
+      "selector": "img[src*='covers'], img[alt*='cover'], img[class*='rounded'], meta[property='og:image']",
       "type": "attribute",
       "attribute": "src",
       "transform": ["absolute_url"]
     },
     "status": {
-      "selector": ".badge, span[class*='status']",
+      "selector": "span[class*='status'], span[class*='badge']",
       "type": "text",
       "transform": ["trim"]
     },
     "tags": {
-      "selector": "a[href*='/browse?'], a[href*='/genres/'], .badge, span.tag",
+      "selector": "a[href*='/tag/'], a[href*='/genre/'], span[class*='badge']",
       "attribute": "text",
       "transform": "trim"
     },
-    "content_warnings": {
+    "contentWarnings": {
       "selector": "span[class*='warning'], .text-red-500",
       "attribute": "text",
       "transform": "trim"
@@ -81,6 +86,31 @@
     "content": {
       "selector": "div.reader-content, article, div[class*='reader']",
       "type": "html"
+    },
+    "content_selectors": [
+      {
+        "selector": "div.reader-content",
+        "type": "html"
+      },
+      {
+        "selector": "article",
+        "type": "html"
+      },
+      {
+        "selector": "div[class*='reader']",
+        "type": "html"
+      }
+    ],
+    "validation": {
+      "min_text_characters": 300,
+      "min_paragraphs": 2,
+      "max_link_density": 0.35,
+      "reject_title_patterns": [
+        "just a moment",
+        "checking your browser",
+        "access denied",
+        "verify you are human"
+      ]
     },
     "sanitize": {
       "remove_tags": ["script", "style", "iframe", "button"],

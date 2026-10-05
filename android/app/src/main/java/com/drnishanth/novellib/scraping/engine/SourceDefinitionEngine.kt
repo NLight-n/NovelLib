@@ -2,6 +2,12 @@ package com.drnishanth.novellib.scraping.engine
 
 import com.drnishanth.novellib.core.network.WebKitCookieJar
 import com.drnishanth.novellib.core.utils.HtmlSanitizer
+import com.drnishanth.novellib.scraping.models.ChapterExtractionException
+import com.drnishanth.novellib.scraping.models.ChapterExtractionResult
+import com.drnishanth.novellib.scraping.models.ContentValidationResult
+import com.drnishanth.novellib.scraping.models.ExtractionFailureReason
+import com.drnishanth.novellib.scraping.models.FetchMethod
+import com.drnishanth.novellib.scraping.models.FetchedDocument
 import com.drnishanth.novellib.scraping.models.ChapterRule
 import com.drnishanth.novellib.scraping.models.RequestConfig
 import com.drnishanth.novellib.scraping.models.ScrapedChapterContent
@@ -132,7 +138,7 @@ class SourceDefinitionEngine(
         val doc = if (!preloadedHtml.isNullOrBlank()) {
             Jsoup.parse(preloadedHtml, url)
         } else {
-            fetchDocument(url, definition.requests["default"])
+            DocumentAcquirer.acquireDocument(url, definition, client, preloadedHtml).document
         }
 
         // Extract Novel metadata
@@ -230,6 +236,76 @@ class SourceDefinitionEngine(
             }
         }
 
+        // Fallback for dynamic AJAX chapter TOC on ScribbleHub
+        if (chapters.isEmpty() && (definition.id.equals("scribblehub", ignoreCase = true) || url.contains("scribblehub.com"))) {
+            try {
+                val postId = doc.selectFirst("input#mypostid, input[name='mypostid']")?.attr("value")
+                    ?: Regex("""/series/(\d+)""").find(url)?.groupValues?.get(1)
+                if (!postId.isNullOrBlank()) {
+                    val formBody = okhttp3.FormBody.Builder()
+                        .add("action", "wi_getreleases_pagination")
+                        .add("pagenum", "-1")
+                        .add("mypostid", postId)
+                        .build()
+                    val ajaxReq = Request.Builder()
+                        .url("https://www.scribblehub.com/wp-admin/admin-ajax.php")
+                        .post(formBody)
+                        .header("Referer", url)
+                        .header("X-Requested-With", "XMLHttpRequest")
+                    try {
+                        val cookieStr = android.webkit.CookieManager.getInstance().getCookie(url)
+                        if (!cookieStr.isNullOrBlank()) ajaxReq.header("Cookie", cookieStr)
+                    } catch (_: Exception) {}
+                    val resp = client.newCall(ajaxReq.build()).execute()
+                    if (resp.isSuccessful) {
+                        val ajaxHtml = resp.body?.string() ?: ""
+                        resp.close()
+                        if (ajaxHtml.isNotBlank()) {
+                            val ajaxDoc = Jsoup.parse(ajaxHtml, url)
+                            extractChaptersFromDoc(ajaxDoc, url)
+                        }
+                    } else {
+                        resp.close()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // Fallback for dynamic AJAX chapter TOC on NovelUpdates
+        if (chapters.isEmpty() && (definition.id.equals("novelupdates", ignoreCase = true) || url.contains("novelupdates.com"))) {
+            try {
+                val postId = doc.selectFirst("input#mypostid, input[name='mypostid']")?.attr("value")
+                    ?: Regex("""mypostid["\s:=]+(\d+)""").find(doc.html())?.groupValues?.get(1)
+                if (!postId.isNullOrBlank()) {
+                    val formBody = okhttp3.FormBody.Builder()
+                        .add("action", "nd_getchapters")
+                        .add("mygrr", "0")
+                        .add("mypostid", postId)
+                        .build()
+                    val ajaxReq = Request.Builder()
+                        .url("https://www.novelupdates.com/wp-admin/admin-ajax.php")
+                        .post(formBody)
+                        .header("Referer", url)
+                        .header("X-Requested-With", "XMLHttpRequest")
+                    try {
+                        val cookieStr = android.webkit.CookieManager.getInstance().getCookie(url)
+                        if (!cookieStr.isNullOrBlank()) ajaxReq.header("Cookie", cookieStr)
+                    } catch (_: Exception) {}
+                    val resp = client.newCall(ajaxReq.build()).execute()
+                    if (resp.isSuccessful) {
+                        val ajaxHtml = resp.body?.string() ?: ""
+                        resp.close()
+                        if (ajaxHtml.isNotBlank()) {
+                            val ajaxDoc = Jsoup.parse(ajaxHtml, url)
+                            extractChaptersFromDoc(ajaxDoc, url)
+                        }
+                    } else {
+                        resp.close()
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
         // De-duplicate by chapter URL and sort if numbers are valid
         val distinctChapters = chapters.distinctBy { it.url }
         val finalChapters = if (distinctChapters.size > 1 && distinctChapters.all { it.number > 0 }) {
@@ -261,29 +337,191 @@ class SourceDefinitionEngine(
     }
 
     /**
+     * Extracts readable chapter content using layered fallback selectors,
+     * generic article heuristic extraction, and strict content validation.
+     */
+    suspend fun extractChapter(
+        url: String,
+        definition: SourceDefinition,
+        preloadedHtml: String? = null
+    ): ChapterExtractionResult = withContext(Dispatchers.IO) {
+        var fetchedDoc = try {
+            DocumentAcquirer.acquireDocument(url, definition, client, preloadedHtml)
+        } catch (e: ChapterExtractionException) {
+            return@withContext ChapterExtractionResult.Failure(
+                reason = e.reason,
+                message = e.message,
+                fetchMethod = e.fetchMethod,
+                validationResult = e.validationResult
+            )
+        } catch (e: Exception) {
+            return@withContext ChapterExtractionResult.Failure(
+                reason = ExtractionFailureReason.NETWORK,
+                message = e.message ?: "Network error connecting to $url"
+            )
+        }
+
+        // Try extracting from candidate document
+        var result = tryExtractFromDoc(fetchedDoc, url, definition)
+
+        // If extraction failed or document was a challenge, and we used HTTP in auto mode, try WebView fallback
+        val mode = definition.rendering?.mode?.lowercase() ?: "auto"
+        if (result !is ChapterExtractionResult.Success &&
+            mode == "auto" &&
+            fetchedDoc.fetchMethod == FetchMethod.HTTP &&
+            preloadedHtml.isNullOrBlank()
+        ) {
+            val context = try { com.drnishanth.novellib.NovelLibApplication.instance } catch (_: Exception) { null }
+            if (context != null) {
+                val webViewDoc = WebViewDocumentFetcher.fetchDocumentDetailed(context, url, definition.rendering)
+                if (webViewDoc != null) {
+                    val webViewResult = tryExtractFromDoc(webViewDoc, url, definition)
+                    if (webViewResult is ChapterExtractionResult.Success) {
+                        return@withContext webViewResult
+                    } else {
+                        result = webViewResult
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
+    private fun tryExtractFromDoc(
+        fetchedDoc: FetchedDocument,
+        url: String,
+        definition: SourceDefinition
+    ): ChapterExtractionResult {
+        val doc = fetchedDoc.document
+        val removeTags = definition.chapter.sanitize?.removeTags ?: listOf("script", "style", "iframe", "button")
+        var lastValidationResult: ContentValidationResult? = null
+
+        // Check upfront if document as a whole is a challenge or login gate
+        val pageValidation = ChapterContentValidator.validate(
+            sanitizedHtml = doc.body().html(),
+            docTitle = doc.title(),
+            fullDoc = doc,
+            rule = definition.chapter.validation
+        )
+        if (pageValidation.reason == ExtractionFailureReason.CHALLENGE ||
+            pageValidation.reason == ExtractionFailureReason.AUTH_REQUIRED
+        ) {
+            return ChapterExtractionResult.Failure(
+                reason = pageValidation.reason,
+                message = pageValidation.matchedRejection ?: "Source challenge or authentication required",
+                fetchMethod = fetchedDoc.fetchMethod,
+                validationResult = pageValidation
+            )
+        }
+
+        // 1. Primary selector
+        val primaryRaw = extractValue(doc, definition.chapter.content, url)
+        if (!primaryRaw.isNullOrBlank()) {
+            val sanitized = sanitizeHtml(primaryRaw, definition.chapter)
+            val validation = ChapterContentValidator.validate(
+                sanitizedHtml = sanitized,
+                docTitle = doc.title(),
+                fullDoc = doc,
+                rule = definition.chapter.validation
+            )
+            if (validation.valid) {
+                return ChapterExtractionResult.Success(
+                    content = ScrapedChapterContent(
+                        title = null,
+                        htmlContent = sanitized,
+                        contentHash = sha256(sanitized)
+                    ),
+                    fetchMethod = fetchedDoc.fetchMethod,
+                    usedFallback = false
+                )
+            }
+            lastValidationResult = validation
+        }
+
+        // 2. Fallback selectors defined on source
+        for (fallbackRule in definition.chapter.contentSelectors) {
+            val raw = extractValue(doc, fallbackRule, url)
+            if (!raw.isNullOrBlank()) {
+                val sanitized = sanitizeHtml(raw, definition.chapter)
+                val validation = ChapterContentValidator.validate(
+                    sanitizedHtml = sanitized,
+                    docTitle = doc.title(),
+                    fullDoc = doc,
+                    rule = definition.chapter.validation
+                )
+                if (validation.valid) {
+                    return ChapterExtractionResult.Success(
+                        content = ScrapedChapterContent(
+                            title = null,
+                            htmlContent = sanitized,
+                            contentHash = sha256(sanitized)
+                        ),
+                        fetchMethod = fetchedDoc.fetchMethod,
+                        usedFallback = true
+                    )
+                }
+                lastValidationResult = validation
+            }
+        }
+
+        // 3. Generic article extractor fallback
+        val genericRaw = GenericArticleExtractor.extractArticle(
+            doc = doc,
+            validationRule = definition.chapter.validation,
+            sanitizeTagRemoval = removeTags
+        )
+        if (!genericRaw.isNullOrBlank()) {
+            val sanitized = sanitizeHtml(genericRaw, definition.chapter)
+            val validation = ChapterContentValidator.validate(
+                sanitizedHtml = sanitized,
+                docTitle = doc.title(),
+                fullDoc = doc,
+                rule = definition.chapter.validation
+            )
+            if (validation.valid) {
+                return ChapterExtractionResult.Success(
+                    content = ScrapedChapterContent(
+                        title = null,
+                        htmlContent = sanitized,
+                        contentHash = sha256(sanitized)
+                    ),
+                    fetchMethod = fetchedDoc.fetchMethod,
+                    usedFallback = true
+                )
+            }
+            lastValidationResult = validation
+        }
+
+        val reason = lastValidationResult?.reason ?: ExtractionFailureReason.NO_CONTENT
+        val message = lastValidationResult?.matchedRejection ?: "No readable chapter content could be extracted from $url"
+        return ChapterExtractionResult.Failure(
+            reason = reason,
+            message = message,
+            fetchMethod = fetchedDoc.fetchMethod,
+            validationResult = lastValidationResult
+        )
+    }
+
+    /**
      * Fetches and normalizes chapter content.
+     * Enforces content validation: never returns content that fails quality checks.
      */
     suspend fun scrapeChapterContent(
         url: String,
         definition: SourceDefinition,
         preloadedHtml: String? = null
     ): ScrapedChapterContent = withContext(Dispatchers.IO) {
-        val doc = if (!preloadedHtml.isNullOrBlank()) {
-            Jsoup.parse(preloadedHtml, url)
-        } else {
-            fetchDocument(url, definition.requests["default"])
+        val result = extractChapter(url, definition, preloadedHtml)
+        when (result) {
+            is ChapterExtractionResult.Success -> result.content
+            is ChapterExtractionResult.Failure -> throw ChapterExtractionException(
+                reason = result.reason,
+                message = result.message,
+                fetchMethod = result.fetchMethod,
+                validationResult = result.validationResult
+            )
         }
-        val rawHtml = extractValue(doc, definition.chapter.content, url)
-            ?: throw IllegalStateException("Chapter content could not be extracted from $url")
-
-        val sanitizedHtml = sanitizeHtml(rawHtml, definition.chapter)
-        val hash = sha256(sanitizedHtml)
-
-        ScrapedChapterContent(
-            title = null,
-            htmlContent = sanitizedHtml,
-            contentHash = hash
-        )
     }
 
     private suspend fun fetchDocument(url: String, requestConfig: RequestConfig?): Document {
@@ -362,6 +600,15 @@ class SourceDefinitionEngine(
     }
 
     private fun extractValue(doc: Document, rule: SelectorRule, baseUrl: String): String? {
+        val subSelectors = rule.selector.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        for (subSel in subSelectors) {
+            val el = doc.selectFirst(subSel) ?: continue
+            val directRule = rule.copy(selector = ".")
+            val extracted = extractFromElement(el, directRule, baseUrl)
+            if (!extracted.isNullOrBlank()) {
+                return extracted
+            }
+        }
         val element = doc.selectFirst(rule.selector) ?: return null
         return extractFromElement(element, rule, baseUrl)
     }
@@ -374,12 +621,27 @@ class SourceDefinitionEngine(
         }
 
         var value = when (rule.type.lowercase()) {
-            "html" -> targetElement.html()
+            "html" -> {
+                if (targetElement.tagName().equals("meta", ignoreCase = true)) {
+                    targetElement.attr("content").ifBlank { targetElement.attr("value") }
+                } else {
+                    targetElement.html()
+                }
+            }
             "attribute" -> {
                 val attr = rule.attribute ?: return null
                 targetElement.attr(attr)
             }
-            else -> targetElement.text()
+            else -> {
+                if (targetElement.tagName().equals("meta", ignoreCase = true)) {
+                    targetElement.attr("content").ifBlank { targetElement.text() }
+                } else if (targetElement.tagName().equals("title", ignoreCase = true)) {
+                    val raw = targetElement.text()
+                    raw.substringBefore("|").substringBefore(" - ").trim()
+                } else {
+                    targetElement.text()
+                }
+            }
         }
 
         // Apply transformations

@@ -1,8 +1,8 @@
 {
   "id": "novgo",
-  "version": 2,
+  "version": 3,
   "name": "NovGo",
-  "description": "NovGo online free web novels and light fiction",
+  "description": "NovGo online light novel library",
   "minimum_engine_version": 1,
   "match": {
     "hosts": [
@@ -10,11 +10,10 @@
       "www.novgo.net"
     ],
     "url_patterns": [
-      "https://novgo.net/*.html",
-      "https://www.novgo.net/*.html",
       "https://novgo.net/*",
       "https://www.novgo.net/*"
-    ]
+    ],
+    "novel_url_pattern": "https://(?:www\\.)?novgo\\.net/[^/]+\\.html$"
   },
   "requests": {
     "default": {
@@ -24,35 +23,47 @@
       }
     }
   },
+  "rendering": {
+    "mode": "auto",
+    "ready_selector": "#chapter-content",
+    "min_text_characters": 300,
+    "max_wait_ms": 12000,
+    "scroll_until_stable": false
+  },
   "novel": {
     "title": {
-      "selector": "h1.tit, .m-desc h1, .g-tit .tit",
+      "selector": "h1.tit, .tit, h1",
       "type": "text",
-      "transform": ["trim"]
+      "transform": ["trim", "decode_html"]
     },
     "author": {
-      "selector": ".m-imgtxt .txt .item a[href*='/author/']",
+      "selector": ".author a, .author, span:contains(Author) a",
       "type": "text",
       "transform": ["trim"]
     },
     "description": {
-      "selector": "#novel-summary-inner, .m-desc .txt .inner, .m-desc .txt",
+      "selector": ".desc, .intro, .synopsis",
       "type": "html",
       "transform": ["trim"]
     },
     "cover": {
-      "selector": ".m-imgtxt .pic img",
+      "selector": ".pic img, .img img, .cover img, img[src*='/cover/']",
       "type": "attribute",
       "attribute": "src",
       "transform": ["absolute_url"]
     },
     "status": {
-      "selector": ".m-imgtxt .item span[title='Status'] + .right a, .m-imgtxt .s1.s2 a",
+      "selector": ".status, .state",
       "type": "text",
       "transform": ["trim"]
     },
     "tags": {
-      "selector": ".m-imgtxt .item span[title='Genre'] + .right a, .m-imgtxt .item span.glyphicon-th-list + .right a, a[href*='/genre/']",
+      "selector": ".genre a, .tags a, .tag a",
+      "attribute": "text",
+      "transform": "trim"
+    },
+    "contentWarnings": {
+      "selector": ".warning a, .warning",
       "attribute": "text",
       "transform": "trim"
     }
@@ -81,6 +92,31 @@
     "content": {
       "selector": "#chapter-content",
       "type": "html"
+    },
+    "content_selectors": [
+      {
+        "selector": "#chapter-content",
+        "type": "html"
+      },
+      {
+        "selector": ".chapter-content",
+        "type": "html"
+      },
+      {
+        "selector": "article",
+        "type": "html"
+      }
+    ],
+    "validation": {
+      "min_text_characters": 300,
+      "min_paragraphs": 2,
+      "max_link_density": 0.35,
+      "reject_title_patterns": [
+        "just a moment",
+        "checking your browser",
+        "access denied",
+        "verify you are human"
+      ]
     },
     "sanitize": {
       "remove_tags": ["script", "style", "iframe", "button", "div.ads", "div.ad", "ins"],
