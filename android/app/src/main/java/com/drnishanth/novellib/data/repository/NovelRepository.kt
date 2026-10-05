@@ -509,6 +509,10 @@ class NovelRepository(
         notificationDao?.clearAllForProfile(profileId)
     }
 
+    suspend fun getSourcesForNovel(novelId: String): List<SourceEntity> {
+        return novelDao.getSourcesForNovel(novelId)
+    }
+
     /**
      * Checks a specific novel for newly published chapters from its connected sources.
      * Inserts new chapters, notifies interested profiles, and auto-queues downloads if configured.

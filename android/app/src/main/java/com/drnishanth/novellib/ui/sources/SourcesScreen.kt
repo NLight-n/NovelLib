@@ -224,7 +224,7 @@ data class SourceBrandStyle(
     val secondaryColor: Color
 )
 
-fun resolveBrandStyle(id: String, name: String, jsonContent: String): SourceBrandStyle {
+fun resolveBrandStyle(id: String, name: String = "", jsonContent: String = ""): SourceBrandStyle {
     return when (id.lowercase()) {
         "royalroad" -> SourceBrandStyle(
             domain = "royalroad.com",
@@ -321,6 +321,52 @@ fun SourceBrandBadge(
                     color = Color.White,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 17.sp
+                )
+            }
+        )
+    }
+}
+
+@Composable
+fun SmallSourceBrandBadge(
+    brandStyle: SourceBrandStyle,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 22.dp
+) {
+    val faviconUrl = "https://www.google.com/s2/favicons?domain=${brandStyle.domain}&sz=64"
+
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(RoundedCornerShape(6.dp))
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(brandStyle.primaryColor, brandStyle.secondaryColor)
+                )
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        SubcomposeAsyncImage(
+            model = faviconUrl,
+            contentDescription = brandStyle.domain,
+            modifier = Modifier
+                .size(size * 0.7f)
+                .clip(RoundedCornerShape(3.dp)),
+            contentScale = ContentScale.Fit,
+            loading = {
+                Text(
+                    text = brandStyle.monogram,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp
+                )
+            },
+            error = {
+                Text(
+                    text = brandStyle.monogram,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp
                 )
             }
         )

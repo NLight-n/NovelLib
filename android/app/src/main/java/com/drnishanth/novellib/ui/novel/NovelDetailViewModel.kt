@@ -48,6 +48,9 @@ class NovelDetailViewModel(
     private val _libraryEntry = MutableStateFlow<LibraryEntryEntity?>(null)
     val libraryEntry: StateFlow<LibraryEntryEntity?> = _libraryEntry.asStateFlow()
 
+    private val _sources = MutableStateFlow<List<com.drnishanth.novellib.core.database.entities.SourceEntity>>(emptyList())
+    val sources: StateFlow<List<com.drnishanth.novellib.core.database.entities.SourceEntity>> = _sources.asStateFlow()
+
     private val _uiState = MutableStateFlow(NovelDetailUiState())
     val uiState: StateFlow<NovelDetailUiState> = _uiState.asStateFlow()
 
@@ -104,6 +107,7 @@ class NovelDetailViewModel(
         viewModelScope.launch {
             _novel.value = novelRepository.getNovel(novelId)
             loadLibraryEntry()
+            _sources.value = novelRepository.getSourcesForNovel(novelId)
         }
     }
 

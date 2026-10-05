@@ -142,6 +142,9 @@ fun NovelNavGraph(
                 },
                 onOpenBrowser = { url ->
                     navController.navigate(Screen.SourceBrowser.createRoute(url))
+                },
+                onOpenSources = {
+                    navController.navigate(Screen.Sources.route)
                 }
             )
         }

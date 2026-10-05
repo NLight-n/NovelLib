@@ -1,53 +1,79 @@
 {
+  "version": 11,
   "registry_version": 11,
+  "updated_at": 1728117300000,
   "last_updated": "2026-10-05T08:35:00Z",
   "sources": [
     {
       "id": "royalroad",
       "name": "Royal Road",
       "version": 5,
+      "description": "Royal Road online web fiction platform",
+      "minimum_engine_version": 1,
       "min_engine_version": 1,
+      "checksum": "3f6c88d757b624e96846524d86ef3f61d76c970aad9901364c07f30ff34a9aa7",
       "sha256": "3f6c88d757b624e96846524d86ef3f61d76c970aad9901364c07f30ff34a9aa7",
+      "relative_path": "definitions/royalroad.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/royalroad.json"
     },
     {
       "id": "scribblehub",
       "name": "Scribble Hub",
       "version": 4,
+      "description": "Original web stories, community fiction, and serialized light novels",
+      "minimum_engine_version": 1,
       "min_engine_version": 1,
+      "checksum": "0ba28ae5e89ba14dae3ca5ff4e92047d3b4ddd5fa18e156b9f8cc15a30757dbc",
       "sha256": "0ba28ae5e89ba14dae3ca5ff4e92047d3b4ddd5fa18e156b9f8cc15a30757dbc",
+      "relative_path": "definitions/scribblehub.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/scribblehub.json"
     },
     {
       "id": "novgo",
       "name": "NovGo",
       "version": 3,
+      "description": "NovGo online free web novels and light fiction",
+      "minimum_engine_version": 1,
       "min_engine_version": 1,
+      "checksum": "a1ad356c8d813489674efa2b5b719f61f27d3f72ba84a596f9b14f13b0757c73",
       "sha256": "a1ad356c8d813489674efa2b5b719f61f27d3f72ba84a596f9b14f13b0757c73",
+      "relative_path": "definitions/novgo.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/novgo.json"
     },
     {
       "id": "litfic",
       "name": "LitFic",
       "version": 4,
+      "description": "Serialized modern fiction, web novels, and original community stories",
+      "minimum_engine_version": 1,
       "min_engine_version": 1,
+      "checksum": "d438aed527ae248f902fecb3d1302871fa23747a94c60269ad6b7bcc076aa3a8",
       "sha256": "d438aed527ae248f902fecb3d1302871fa23747a94c60269ad6b7bcc076aa3a8",
+      "relative_path": "definitions/litfic.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/litfic.json"
     },
     {
       "id": "tapas",
       "name": "Tapas",
       "version": 2,
+      "description": "Web novels, serialized community books, and light fiction",
+      "minimum_engine_version": 1,
       "min_engine_version": 1,
+      "checksum": "419c44faff8e19fc981166ab551b83372b0d277f32e2b956351197de3a3f7923",
       "sha256": "419c44faff8e19fc981166ab551b83372b0d277f32e2b956351197de3a3f7923",
+      "relative_path": "definitions/tapas.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/tapas.json"
     },
     {
       "id": "novelupdates",
       "name": "Novel Updates",
       "version": 3,
+      "description": "Directory, tracker, and reading index for Asian translated web novels",
+      "minimum_engine_version": 1,
       "min_engine_version": 1,
+      "checksum": "77973bc17629ca19db4fb83db0afb364427d4ecf100a731327ca557183096267",
       "sha256": "77973bc17629ca19db4fb83db0afb364427d4ecf100a731327ca557183096267",
+      "relative_path": "definitions/novelupdates.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/novelupdates.json"
     }
   ]

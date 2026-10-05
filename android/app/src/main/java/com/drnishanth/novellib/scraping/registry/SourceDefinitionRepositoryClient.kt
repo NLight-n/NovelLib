@@ -120,10 +120,15 @@ class SourceDefinitionRepositoryClient(
                 ?: return@withContext Result.failure(IllegalStateException("Empty definition body received"))
 
             // 1. Checksum verification
-            val checksumValid = IntegrityAndSignatureVerifier.verifyChecksum(rawJson, item.checksum)
+            val targetChecksum = item.effectiveChecksum
+            val checksumValid = if (targetChecksum.isNotBlank()) {
+                IntegrityAndSignatureVerifier.verifyChecksum(rawJson, targetChecksum)
+            } else {
+                true
+            }
             if (!checksumValid) {
                 return@withContext Result.failure(
-                    SecurityException("Checksum mismatch for ${item.id}. Expected: ${item.checksum}")
+                    SecurityException("Checksum mismatch for ${item.id}. Expected: $targetChecksum")
                 )
             }
 
@@ -159,7 +164,7 @@ class SourceDefinitionRepositoryClient(
                 enabled = existing?.enabled ?: true,
                 minimumEngineVersion = parsedDefinition.minimumEngineVersion,
                 definitionUrl = downloadUrl,
-                checksum = item.checksum,
+                checksum = targetChecksum.ifBlank { IntegrityAndSignatureVerifier.sha256(rawJson) },
                 signature = item.signature,
                 jsonContent = rawJson,
                 previousVersion = existing?.version,

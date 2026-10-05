@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.FormatListNumbered
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Tune
@@ -112,6 +113,8 @@ import com.drnishanth.novellib.downloads.models.ChapterDownloadStatus
 import com.drnishanth.novellib.downloads.models.DownloadState
 import com.drnishanth.novellib.ui.reader.ReaderScreen
 import com.drnishanth.novellib.ui.reader.ReaderViewModel
+import com.drnishanth.novellib.ui.sources.SmallSourceBrandBadge
+import com.drnishanth.novellib.ui.sources.resolveBrandStyle
 import kotlinx.coroutines.launch
 
 enum class NovelDetailTab(val title: String, val icon: ImageVector) {
@@ -130,9 +133,12 @@ fun NovelDetailScreen(
     viewModel: NovelDetailViewModel,
     onBack: () -> Unit,
     onOpenChapter: (chapterId: String) -> Unit = {},
-    onOpenBrowser: ((url: String) -> Unit)? = null
+    onOpenBrowser: ((url: String) -> Unit)? = null,
+    onOpenSources: () -> Unit = {}
 ) {
     val novel by viewModel.novel.collectAsState()
+    val sources by viewModel.sources.collectAsState()
+    val primarySource = sources.firstOrNull()
     val chapters by viewModel.chapters.collectAsState()
     val progress by viewModel.readingProgress.collectAsState()
     val readChapterIds by viewModel.readChapterIds.collectAsState()
@@ -223,6 +229,13 @@ fun NovelDetailScreen(
                         }
                     },
                     actions = {
+                        IconButton(onClick = onOpenSources) {
+                            Icon(
+                                Icons.Default.Public,
+                                contentDescription = "Website Sources",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         IconButton(
                             onClick = { viewModel.checkForUpdates() },
                             enabled = !uiState.isCheckingUpdates
@@ -364,12 +377,46 @@ fun NovelDetailScreen(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = n.status,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(
+                                                text = n.status,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.Bold
+                                            )
+
+                                            val sourceDefId = primarySource?.sourceDefinitionId ?: "web"
+                                            val brand = resolveBrandStyle(sourceDefId)
+                                            val displayName = when (sourceDefId.lowercase()) {
+                                                "royalroad" -> "Royal Road"
+                                                "scribblehub" -> "Scribble Hub"
+                                                "novgo" -> "NovGo"
+                                                "litfic" -> "LitFic"
+                                                "tapas" -> "Tapas"
+                                                "novelupdates" -> "Novel Updates"
+                                                else -> brand.domain.removeSuffix(".com").removeSuffix(".net").removeSuffix(".io").replaceFirstChar { it.uppercase() }
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                                    .clickable { onOpenSources() }
+                                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                SmallSourceBrandBadge(brandStyle = brand, size = 18.dp)
+                                                Text(
+                                                    text = displayName,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
                                     }
                                 }
 
@@ -512,11 +559,25 @@ fun NovelDetailScreen(
 
                                 // Synopsis text
                                 if (n.description.isNotBlank()) {
-                                    Text(
-                                        text = "Synopsis",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Synopsis",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        val sourceDefId = primarySource?.sourceDefinitionId ?: "web"
+                                        val brand = resolveBrandStyle(sourceDefId)
+                                        IconButton(
+                                            onClick = onOpenSources,
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            SmallSourceBrandBadge(brandStyle = brand, size = 20.dp)
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     val cleanSynopsis = remember(n.description) {
                                         HtmlSanitizer.cleanHtmlSynopsis(n.description)
