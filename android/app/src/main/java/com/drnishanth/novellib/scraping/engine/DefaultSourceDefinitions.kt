@@ -129,7 +129,7 @@ object DefaultSourceDefinitions {
 
     val SCRIBBLE_HUB = SourceDefinition(
         id = "scribblehub",
-        version = 4,
+        version = 5,
         name = "Scribble Hub",
         description = "Original web stories, community fiction, and serialized light novels",
         minimumEngineVersion = 1,
@@ -583,7 +583,7 @@ object DefaultSourceDefinitions {
 
     val NOVEL_UPDATES = SourceDefinition(
         id = "novelupdates",
-        version = 3,
+        version = 4,
         name = "Novel Updates",
         description = "Directory, tracker, and reading index for Asian translated web novels",
         minimumEngineVersion = 1,
@@ -591,7 +591,9 @@ object DefaultSourceDefinitions {
             hosts = listOf("novelupdates.com", "www.novelupdates.com"),
             urlPatterns = listOf(
                 "https://www.novelupdates.com/series/*",
-                "https://novelupdates.com/series/*"
+                "https://novelupdates.com/series/*",
+                "https://www.novelupdates.com/extnu/*",
+                "https://novelupdates.com/extnu/*"
             ),
             novelUrlPattern = "https://www.novelupdates.com/series/*"
         ),
@@ -605,7 +607,7 @@ object DefaultSourceDefinitions {
         ),
         rendering = RenderingRule(
             mode = "auto",
-            readySelector = "div.entry-content, article, div#content",
+            readySelector = "div.entry-content, article, div#content, div.reading-content",
             minTextCharacters = 300,
             maxWaitMs = 12000L,
             scrollUntilStable = false
@@ -649,29 +651,34 @@ object DefaultSourceDefinitions {
             )
         ),
         chapters = ChaptersRules(
-            container = "table#myTable tbody tr, #myTable tr, ul.sp-toc li, a.chp_a, a[href*='/extnu/'], a.chp-release-title, #novellib-injected-nu-toc a, #novellib-injected-nu-toc tr",
+            container = "a.chp-release-title, a[href*='/extnu/']",
             title = SelectorRule(
-                selector = "a",
+                selector = "a.chp-release-title, a[href*='/extnu/']",
                 type = "text",
                 transform = listOf("trim")
             ),
             url = SelectorRule(
-                selector = "a",
+                selector = "a.chp-release-title, a[href*='/extnu/']",
                 type = "attribute",
                 attribute = "href",
                 transform = listOf("absolute_url")
-            )
+            ),
+            order = "desc"
         ),
         chapter = ChapterRule(
             content = SelectorRule(
-                selector = "div.entry-content, article, div#content, .chapter-content",
+                selector = "div.entry-content, article, div#content, .chapter-content, div.reading-content, div.text-left, div.post-content, div.post-body, .epcontent, #chapter-content",
                 type = "html"
             ),
             contentSelectors = listOf(
                 SelectorRule("div.entry-content", "html"),
                 SelectorRule("article", "html"),
                 SelectorRule("div#content", "html"),
-                SelectorRule(".chapter-content", "html")
+                SelectorRule(".chapter-content", "html"),
+                SelectorRule("div.reading-content", "html"),
+                SelectorRule("div.text-left", "html"),
+                SelectorRule("div.post-content, div.post-body", "html"),
+                SelectorRule(".epcontent, #chapter-content", "html")
             ),
             validation = ContentValidationRule(
                 minTextCharacters = 300,

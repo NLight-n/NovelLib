@@ -1,8 +1,8 @@
 {
-  "version": 11,
-  "registry_version": 11,
-  "updated_at": 1728117300000,
-  "last_updated": "2026-10-05T08:35:00Z",
+  "version": 12,
+  "registry_version": 12,
+  "updated_at": 1728120000000,
+  "last_updated": "2026-10-05T12:20:00Z",
   "sources": [
     {
       "id": "royalroad",
@@ -19,12 +19,12 @@
     {
       "id": "scribblehub",
       "name": "Scribble Hub",
-      "version": 4,
+      "version": 5,
       "description": "Original web stories, community fiction, and serialized light novels",
       "minimum_engine_version": 1,
       "min_engine_version": 1,
-      "checksum": "0ba28ae5e89ba14dae3ca5ff4e92047d3b4ddd5fa18e156b9f8cc15a30757dbc",
-      "sha256": "0ba28ae5e89ba14dae3ca5ff4e92047d3b4ddd5fa18e156b9f8cc15a30757dbc",
+      "checksum": "1d6c8a1997d93a697cd26b1608bd1ea537190fe49e8b9a5a097b641215b7d45a",
+      "sha256": "1d6c8a1997d93a697cd26b1608bd1ea537190fe49e8b9a5a097b641215b7d45a",
       "relative_path": "definitions/scribblehub.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/scribblehub.json"
     },
@@ -67,12 +67,12 @@
     {
       "id": "novelupdates",
       "name": "Novel Updates",
-      "version": 3,
+      "version": 4,
       "description": "Directory, tracker, and reading index for Asian translated web novels",
       "minimum_engine_version": 1,
       "min_engine_version": 1,
-      "checksum": "77973bc17629ca19db4fb83db0afb364427d4ecf100a731327ca557183096267",
-      "sha256": "77973bc17629ca19db4fb83db0afb364427d4ecf100a731327ca557183096267",
+      "checksum": "a4576a96c7c35be61dad6a4ce2cff74827c692d0e0c58faf07b359c463cad4c5",
+      "sha256": "a4576a96c7c35be61dad6a4ce2cff74827c692d0e0c58faf07b359c463cad4c5",
       "relative_path": "definitions/novelupdates.json",
       "url": "https://raw.githubusercontent.com/NLight-n/NovelLib/main/sources/definitions/novelupdates.json"
     }

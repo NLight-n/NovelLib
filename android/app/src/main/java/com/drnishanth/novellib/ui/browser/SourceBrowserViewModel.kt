@@ -263,80 +263,109 @@ class SourceBrowserViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(isImporting = true, errorMessage = null) }
 
-            // Extract outerHTML directly from active WebView to bypass Cloudflare and render SPA DOM
             val preloadedHtml: String? = if (webView != null) {
                 withContext(Dispatchers.Main) {
-                    suspendCancellableCoroutine { continuation ->
-                        val extractionJs = """
-                            (function() {
+                    kotlinx.coroutines.withTimeoutOrNull(8000L) {
+                        suspendCancellableCoroutine { continuation ->
+                            val bridgeName = "NovelLibBridge_" + System.currentTimeMillis()
+                            val cleanup = {
                                 try {
-                                    var host = window.location.hostname.toLowerCase();
-                                    if (host.indexOf("scribblehub.com") !== -1) {
-                                        var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
-                                        var postId = postIdInput ? postIdInput.value : null;
-                                        if (!postId) {
-                                            var m = window.location.pathname.match(/\/series\/(\d+)/);
-                                            if (m) postId = m[1];
-                                        }
-                                        if (postId) {
-                                            var existing = document.querySelectorAll("a.toc_a, li.toc_li");
-                                            if (existing.length === 0) {
-                                                var xhr = new XMLHttpRequest();
-                                                xhr.open("POST", "/wp-admin/admin-ajax.php", false);
-                                                xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
-                                                xhr.send("action=wi_getreleases_pagination&pagenum=-1&mypostid=" + postId);
-                                                if (xhr.status === 200 && xhr.responseText) {
-                                                    var container = document.getElementById("toc_list") || document.querySelector("ul.toc_w") || document.body;
-                                                    var tempDiv = document.createElement("div");
-                                                    tempDiv.id = "novellib-injected-toc";
-                                                    tempDiv.innerHTML = xhr.responseText;
-                                                    container.appendChild(tempDiv);
-                                                }
-                                            }
-                                        }
-                                    } else if (host.indexOf("novelupdates.com") !== -1) {
-                                        var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
-                                        var postId = postIdInput ? postIdInput.value : null;
-                                        if (!postId) {
-                                            var m = document.body.innerHTML.match(/mypostid["\s:=]+(\d+)/);
-                                            if (m) postId = m[1];
-                                        }
-                                        if (postId) {
-                                            var existing = document.querySelectorAll("#myTable tr, a[href*='/extnu/']");
-                                            if (existing.length === 0) {
-                                                var xhr = new XMLHttpRequest();
-                                                xhr.open("POST", "/wp-admin/admin-ajax.php", false);
-                                                xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
-                                                xhr.send("action=nd_getchapters&mygrr=0&mypostid=" + postId);
-                                                if (xhr.status === 200 && xhr.responseText) {
-                                                    var container = document.getElementById("myTable") || document.body;
-                                                    var tempDiv = document.createElement("div");
-                                                    tempDiv.id = "novellib-injected-nu-toc";
-                                                    tempDiv.innerHTML = xhr.responseText;
-                                                    container.appendChild(tempDiv);
-                                                }
-                                            }
-                                        }
-                                    }
-                                } catch (e) {}
-                                return document.documentElement.outerHTML;
-                            })()
-                        """.trimIndent()
+                                    webView.removeJavascriptInterface(bridgeName)
+                                } catch (_: Exception) {}
+                            }
 
-                        webView.evaluateJavascript(extractionJs) { result ->
-                            if (result != null && result != "null" && result.length > 50) {
+                            webView.addJavascriptInterface(object {
+                                @android.webkit.JavascriptInterface
+                                fun onComplete(html: String?) {
+                                    cleanup()
+                                    if (continuation.isActive) {
+                                        continuation.resume(html)
+                                    }
+                                }
+                            }, bridgeName)
+
+                            continuation.invokeOnCancellation {
+                                cleanup()
+                            }
+
+                            val extractionJs = """
+                                (async function() {
+                                    try {
+                                        var host = window.location.hostname.toLowerCase();
+                                        if (host.indexOf("scribblehub.com") !== -1) {
+                                            var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
+                                            var postId = postIdInput ? postIdInput.value : null;
+                                            if (!postId) {
+                                                var m = window.location.pathname.match(/\/series\/(\d+)/);
+                                                if (m) postId = m[1];
+                                            }
+                                            if (postId) {
+                                                var existing = document.querySelectorAll("a.toc_a, li.toc_li");
+                                                if (existing.length === 0) {
+                                                    var fd = new URLSearchParams();
+                                                    fd.append("action", "wi_getreleases_pagination");
+                                                    fd.append("pagenum", "-1");
+                                                    fd.append("mypostid", postId);
+                                                    var resp = await fetch("/wp-admin/admin-ajax.php", {
+                                                        method: "POST",
+                                                        body: fd,
+                                                        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }
+                                                    });
+                                                    if (resp.ok) {
+                                                        var text = await resp.text();
+                                                        var container = document.getElementById("toc_list") || document.querySelector("ul.toc_w") || document.body;
+                                                        var div = document.createElement("div");
+                                                        div.id = "novellib-injected-toc";
+                                                        div.innerHTML = text;
+                                                        container.appendChild(div);
+                                                    }
+                                                }
+                                            }
+                                        } else if (host.indexOf("novelupdates.com") !== -1) {
+                                            var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
+                                            var postId = postIdInput ? postIdInput.value : null;
+                                            if (!postId) {
+                                                var m = document.body.innerHTML.match(/mypostid["\s:=]+(\d+)/);
+                                                if (m) postId = m[1];
+                                            }
+                                            if (postId) {
+                                                var fd = new URLSearchParams();
+                                                fd.append("action", "nd_getchapters");
+                                                fd.append("mygrr", "0");
+                                                fd.append("mypostid", postId);
+                                                var resp = await fetch("/wp-admin/admin-ajax.php", {
+                                                    method: "POST",
+                                                    body: fd,
+                                                    headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }
+                                                });
+                                                if (resp.ok) {
+                                                    var text = await resp.text();
+                                                    var container = document.getElementById("myTable") || document.body;
+                                                    var div = document.createElement("div");
+                                                    div.id = "novellib-injected-nu-toc";
+                                                    div.innerHTML = text;
+                                                    container.appendChild(div);
+                                                }
+                                            }
+                                        }
+                                    } catch (e) {}
+                                    if (window.$bridgeName && typeof window.$bridgeName.onComplete === 'function') {
+                                        window.$bridgeName.onComplete(document.documentElement.outerHTML);
+                                    }
+                                })();
+                            """.trimIndent()
+
+                            webView.evaluateJavascript(extractionJs, null)
+                        }
+                    } ?: run {
+                        suspendCancellableCoroutine { continuation ->
+                            webView.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
                                 val unescaped = try {
                                     org.json.JSONTokener(result).nextValue() as? String ?: result
                                 } catch (_: Exception) {
                                     result
                                 }
-                                if (continuation.isActive) {
-                                    continuation.resume(unescaped)
-                                }
-                            } else {
-                                if (continuation.isActive) {
-                                    continuation.resume(null)
-                                }
+                                continuation.resume(unescaped)
                             }
                         }
                     }

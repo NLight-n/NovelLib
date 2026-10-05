@@ -369,4 +369,141 @@ class SourceDefinitionEngineTest {
         assertEquals("A thrilling journey into uncharted lands.", novel.description)
         assertEquals(1, chapters.size)
     }
+
+    @Test
+    fun testNovelUpdatesChapterExtractionIgnoresGroupLinks() = runBlocking {
+        val nuHtml = """
+            <html>
+            <head><title>Trash of the Count's Family</title></head>
+            <body>
+                <h1 class="seriestitlenu">Trash of the Count's Family</h1>
+                <div id="showauthors"><a>Author-san</a></div>
+                <div id="editdescription"><p>A great story about a trash noble.</p></div>
+                <table id="myTable">
+                    <tbody>
+                        <tr>
+                            <td>01/02/24</td>
+                            <td><a href="https://www.novelupdates.com/group/wuxiaworld/">Wuxiaworld</a></td>
+                            <td><a href="https://www.novelupdates.com/extnu/2002/" class="chp-release-title"><span>c2</span></a></td>
+                        </tr>
+                        <tr>
+                            <td>01/01/24</td>
+                            <td><a href="https://www.novelupdates.com/group/wuxiaworld/">Wuxiaworld</a></td>
+                            <td><a href="https://www.novelupdates.com/extnu/2001/" class="chp-release-title"><span>c1</span></a></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val (novel, chapters) = engine.scrapeNovel(
+            url = "https://www.novelupdates.com/series/trash-of-the-counts-family/",
+            definition = DefaultSourceDefinitions.NOVEL_UPDATES,
+            preloadedHtml = nuHtml
+        )
+
+        assertEquals("Trash of the Count's Family", novel.title)
+        assertEquals(2, chapters.size)
+        // Group links must NOT be extracted
+        assertFalse(chapters.any { it.url.contains("/group/") })
+        assertTrue(chapters.all { it.url.contains("/extnu/") })
+
+        // Proper ascending reading order: c1 first, then c2
+        assertEquals("c1", chapters[0].title)
+        assertEquals("https://www.novelupdates.com/extnu/2001/", chapters[0].url)
+        assertEquals(1, chapters[0].number)
+
+        assertEquals("c2", chapters[1].title)
+        assertEquals("https://www.novelupdates.com/extnu/2002/", chapters[1].url)
+        assertEquals(2, chapters[1].number)
+    }
+
+    @Test
+    fun testScribbleHubInjectedTocExtraction() = runBlocking {
+        val shHtml = """
+            <html>
+            <head><title>Tree of Aeons</title></head>
+            <body>
+                <h1 class="fic_title">Tree of Aeons</h1>
+                <span class="auth_name_fic"><a>Spaizo</a></span>
+                <div class="wi_fic_desc"><p>Tree reincarnation story.</p></div>
+                <div id="novellib-injected-toc">
+                    <ul class="toc_w">
+                        <li class="toc_li"><a class="toc_a" href="https://www.scribblehub.com/read/10700/chapter-1/">Chapter 1: The Seed</a></li>
+                        <li class="toc_li"><a class="toc_a" href="https://www.scribblehub.com/read/10700/chapter-2/">Chapter 2: Sprouting</a></li>
+                    </ul>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        val (novel, chapters) = engine.scrapeNovel(
+            url = "https://www.scribblehub.com/series/10700/tree-of-aeons/",
+            definition = DefaultSourceDefinitions.SCRIBBLE_HUB,
+            preloadedHtml = shHtml
+        )
+
+        assertEquals("Tree of Aeons", novel.title)
+        assertEquals("Spaizo", novel.author)
+        assertEquals(2, chapters.size)
+        assertEquals("Chapter 1: The Seed", chapters[0].title)
+        assertEquals("https://www.scribblehub.com/read/10700/chapter-1/", chapters[0].url)
+        assertEquals(1, chapters[0].number)
+        assertEquals("Chapter 2: Sprouting", chapters[1].title)
+        assertEquals("https://www.scribblehub.com/read/10700/chapter-2/", chapters[1].url)
+        assertEquals(2, chapters[1].number)
+    }
+
+    @Test
+    fun testReaderModeFallbackWhenDirectExtractionFails() = runBlocking {
+        val fakeReaderModeExtractor = object : ReaderModeExtractor {
+            override suspend fun extract(input: ReaderModeInput): ReaderModeResult {
+                return ReaderModeResult(
+                    title = "Chapter 1: The Beginning",
+                    byline = "Author Name",
+                    excerpt = "It was a dark and stormy night...",
+                    html = "<div><p>It was a dark and stormy night across the sprawling valley. The wind roared relentlessly through the ancient pines, carrying the cold scent of the approaching winter storm.</p><p>Kael gripped his wooden staff tighter as he stepped through the muddy forest path, listening carefully to every whisper of the nocturnal wilderness around him.</p><p>He knew the mountain path would only grow more treacherous after dusk, yet there was no turning back tonight.</p></div>",
+                    textLength = 450,
+                    confidence = ReaderModeConfidence.HIGH
+                )
+            }
+        }
+
+        val engineWithReaderMode = SourceDefinitionEngine(readerModeExtractor = fakeReaderModeExtractor)
+
+        // HTML where the chapter content is in an obscure non-matching container with no <p> tags
+        val obscureHtml = """
+            <html>
+            <head><title>Obscure Blog Chapter 1</title></head>
+            <body>
+                <div class="custom-scroll-container">
+                    <span class="prose">It was a dark and stormy night across the sprawling valley. The wind roared relentlessly through the ancient pines, carrying the cold scent of the approaching winter storm.</span><br><br>
+                    <span class="prose">Kael gripped his wooden staff tighter as he stepped through the muddy forest path, listening carefully to every whisper of the nocturnal wilderness around him.</span>
+                </div>
+            </body>
+            </html>
+        """.trimIndent()
+
+        // Source definition with a selector that intentionally DOES NOT match
+        val strictDef = sampleDefinition.copy(
+            chapter = ChapterRule(
+                content = SelectorRule(selector = "div.non-existent-content", type = "html"),
+                contentSelectors = listOf(SelectorRule("div.missing", "html")),
+                validation = ContentValidationRule(minTextCharacters = 100, minParagraphs = 2)
+            )
+        )
+
+        val result = engineWithReaderMode.extractChapter(
+            url = "https://testfiction.com/novel/123/c1",
+            definition = strictDef,
+            preloadedHtml = obscureHtml
+        )
+
+        assertTrue("Expected extraction success via ReaderMode fallback", result is ChapterExtractionResult.Success)
+        val success = result as ChapterExtractionResult.Success
+        assertEquals(com.drnishanth.novellib.scraping.models.FetchMethod.READER_MODE, success.fetchMethod)
+        assertTrue(success.usedFallback)
+        assertTrue(success.content.htmlContent.contains("It was a dark and stormy night"))
+    }
 }

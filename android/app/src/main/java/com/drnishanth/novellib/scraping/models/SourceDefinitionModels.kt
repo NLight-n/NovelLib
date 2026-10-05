@@ -90,7 +90,8 @@ data class ChaptersRules(
     val url: SelectorRule,
     @SerialName("published_at")
     val publishedAt: SelectorRule? = null,
-    val pagination: SelectorRule? = null
+    val pagination: SelectorRule? = null,
+    val order: String? = null
 )
 
 @Serializable
@@ -146,7 +147,7 @@ enum class ExtractionFailureReason {
     TIMEOUT
 }
 
-enum class FetchMethod { HTTP, WEBVIEW }
+enum class FetchMethod { HTTP, WEBVIEW, READER_MODE }
 
 data class FetchedDocument(
     val document: org.jsoup.nodes.Document,

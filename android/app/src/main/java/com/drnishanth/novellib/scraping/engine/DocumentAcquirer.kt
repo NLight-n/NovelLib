@@ -169,10 +169,11 @@ object DocumentAcquirer {
             )
         }
 
-        val doc = Jsoup.parse(body, url)
+        val effectiveFinalUrl = response.request.url.toString()
+        val doc = Jsoup.parse(body, effectiveFinalUrl)
         return FetchedDocument(
             document = doc,
-            finalUrl = url,
+            finalUrl = effectiveFinalUrl,
             fetchMethod = FetchMethod.HTTP,
             elapsedMs = System.currentTimeMillis() - startTime
         )

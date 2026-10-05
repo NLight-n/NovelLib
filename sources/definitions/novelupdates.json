@@ -1,6 +1,6 @@
 {
   "id": "novelupdates",
-  "version": 3,
+  "version": 4,
   "name": "Novel Updates",
   "description": "Novel Updates Asian web novel directory and releases",
   "minimum_engine_version": 1,
@@ -11,7 +11,9 @@
     ],
     "url_patterns": [
       "https://www.novelupdates.com/series/*",
-      "https://novelupdates.com/series/*"
+      "https://novelupdates.com/series/*",
+      "https://www.novelupdates.com/extnu/*",
+      "https://novelupdates.com/extnu/*"
     ],
     "novel_url_pattern": "https://(?:www\\.)?novelupdates\\.com/series/[^/]+/$"
   },
@@ -25,7 +27,7 @@
   },
   "rendering": {
     "mode": "auto",
-    "ready_selector": "div.entry-content, article, div#content",
+    "ready_selector": "div.entry-content, article, div#content, div.reading-content",
     "min_text_characters": 300,
     "max_wait_ms": 12000,
     "scroll_until_stable": false
@@ -69,22 +71,23 @@
     }
   },
   "chapters": {
-    "container": "table#myTable tbody tr, #myTable tr, ul.sp-toc li, a.chp_a, a[href*='/extnu/'], a.chp-release-title, #novellib-injected-nu-toc a, #novellib-injected-nu-toc tr",
+    "container": "a.chp-release-title, a[href*='/extnu/']",
     "title": {
-      "selector": "a",
+      "selector": "a.chp-release-title, a[href*='/extnu/']",
       "type": "text",
       "transform": ["trim"]
     },
     "url": {
-      "selector": "a",
+      "selector": "a.chp-release-title, a[href*='/extnu/']",
       "type": "attribute",
       "attribute": "href",
       "transform": ["absolute_url"]
-    }
+    },
+    "order": "desc"
   },
   "chapter": {
     "content": {
-      "selector": "div.entry-content, article, div#content, .chapter-content",
+      "selector": "div.entry-content, article, div#content, .chapter-content, div.reading-content, div.text-left, div.post-content, div.post-body, .epcontent, #chapter-content",
       "type": "html"
     },
     "content_selectors": [
@@ -102,6 +105,18 @@
       },
       {
         "selector": ".chapter-content",
+        "type": "html"
+      },
+      {
+        "selector": "div.reading-content",
+        "type": "html"
+      },
+      {
+        "selector": "div.text-left",
+        "type": "html"
+      },
+      {
+        "selector": "div.post-content, div.post-body",
         "type": "html"
       }
     ],

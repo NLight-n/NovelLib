@@ -95,6 +95,22 @@ object WebViewDocumentFetcher {
                             webViewClient = object : WebViewClient() {
                                 private var pageLoaded = false
 
+                                override fun onReceivedError(
+                                    view: WebView?,
+                                    request: android.webkit.WebResourceRequest?,
+                                    error: android.webkit.WebResourceError?
+                                ) {
+                                    super.onReceivedError(view, request, error)
+                                }
+
+                                override fun onRenderProcessGone(
+                                    view: WebView?,
+                                    detail: android.webkit.RenderProcessGoneDetail?
+                                ): Boolean {
+                                    cleanup()
+                                    return true
+                                }
+
                                 override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                                     super.onPageFinished(view, finishedUrl)
                                     if (pageLoaded) return
@@ -105,12 +121,13 @@ object WebViewDocumentFetcher {
                                     val checkJs = """
                                         (function() {
                                             var targetSel = $selectorJson;
-                                            var elReady = targetSel.length > 0 ? (document.querySelector(targetSel) !== null) : true;
-                                            var bodyText = document.body ? (document.body.innerText || '') : '';
-                                            var textLen = bodyText.trim().length;
+                                            var targetEl = targetSel.length > 0 ? document.querySelector(targetSel) : null;
+                                            var elReady = targetSel.length > 0 ? (targetEl !== null) : true;
+                                            var targetText = targetEl ? (targetEl.innerText || '') : (document.body ? (document.body.innerText || '') : '');
+                                            var textLen = targetText.trim().length;
                                             var title = document.title || '';
                                             var challengeRegex = /just a moment|checking your browser|cf-browser-verification|verify you are human|access denied/i;
-                                            var isChallenge = challengeRegex.test(title) || (textLen < 600 && challengeRegex.test(bodyText));
+                                            var isChallenge = challengeRegex.test(title) || (textLen < 600 && challengeRegex.test(targetText));
                                             return JSON.stringify({
                                                 ready: elReady && textLen >= $minChars && !isChallenge,
                                                 isChallenge: isChallenge,
@@ -121,7 +138,69 @@ object WebViewDocumentFetcher {
                                     """.trimIndent()
 
                                     fun captureOuterHtml() {
-                                        view?.evaluateJavascript("(function(){return document.documentElement.outerHTML;})()") { result ->
+                                        val captureJs = """
+                                            (async function() {
+                                                try {
+                                                    var host = window.location.hostname.toLowerCase();
+                                                    if (host.indexOf("scribblehub.com") !== -1 && document.querySelectorAll("a.toc_a, li.toc_li").length === 0) {
+                                                        var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
+                                                        var postId = postIdInput ? postIdInput.value : null;
+                                                        if (!postId) {
+                                                            var m = window.location.pathname.match(/\/series\/(\d+)/);
+                                                            if (m) postId = m[1];
+                                                        }
+                                                        if (postId) {
+                                                            var fd = new URLSearchParams();
+                                                            fd.append("action", "wi_getreleases_pagination");
+                                                            fd.append("pagenum", "-1");
+                                                            fd.append("mypostid", postId);
+                                                            var resp = await fetch("/wp-admin/admin-ajax.php", {
+                                                                method: "POST",
+                                                                body: fd,
+                                                                headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }
+                                                            });
+                                                            if (resp.ok) {
+                                                                var text = await resp.text();
+                                                                var container = document.getElementById("toc_list") || document.querySelector("ul.toc_w") || document.body;
+                                                                var div = document.createElement("div");
+                                                                div.id = "novellib-injected-toc";
+                                                                div.innerHTML = text;
+                                                                container.appendChild(div);
+                                                            }
+                                                        }
+                                                    } else if (host.indexOf("novelupdates.com") !== -1 && document.querySelectorAll("#novellib-injected-nu-toc, a[href*='/extnu/']").length === 0) {
+                                                        var postIdInput = document.getElementById("mypostid") || document.querySelector("input[name='mypostid']");
+                                                        var postId = postIdInput ? postIdInput.value : null;
+                                                        if (!postId) {
+                                                            var m = document.body.innerHTML.match(/mypostid["\s:=]+(\d+)/);
+                                                            if (m) postId = m[1];
+                                                        }
+                                                        if (postId) {
+                                                            var fd = new URLSearchParams();
+                                                            fd.append("action", "nd_getchapters");
+                                                            fd.append("mygrr", "0");
+                                                            fd.append("mypostid", postId);
+                                                            var resp = await fetch("/wp-admin/admin-ajax.php", {
+                                                                method: "POST",
+                                                                body: fd,
+                                                                headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" }
+                                                            });
+                                                            if (resp.ok) {
+                                                                var text = await resp.text();
+                                                                var container = document.getElementById("myTable") || document.body;
+                                                                var div = document.createElement("div");
+                                                                div.id = "novellib-injected-nu-toc";
+                                                                div.innerHTML = text;
+                                                                container.appendChild(div);
+                                                            }
+                                                        }
+                                                    }
+                                                } catch (e) {}
+                                                return document.documentElement.outerHTML;
+                                            })()
+                                        """.trimIndent()
+
+                                        view?.evaluateJavascript(captureJs) { result ->
                                             val unquoted = try {
                                                 if (result != null && result.startsWith("\"") && result.endsWith("\"")) {
                                                     org.json.JSONTokener(result).nextValue() as? String ?: result
@@ -158,8 +237,8 @@ object WebViewDocumentFetcher {
 
                                                 if (isReady || attempts >= maxAttempts) {
                                                     if (scrollUntilStable && isReady) {
-                                                        view.evaluateJavascript("window.scrollBy(0, 800);", null)
-                                                        mainHandler.postDelayed({ captureOuterHtml() }, 500)
+                                                        view.evaluateJavascript("window.scrollBy(0, 1000);", null)
+                                                        mainHandler.postDelayed({ captureOuterHtml() }, 400)
                                                     } else {
                                                         captureOuterHtml()
                                                     }

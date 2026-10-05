@@ -33,8 +33,15 @@ class SourceDefinitionEngine(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
-        .build()
+        .build(),
+    private val readerModeExtractor: ReaderModeExtractor? = null
 ) {
+
+    private fun getReaderModeExtractor(): ReaderModeExtractor? {
+        if (readerModeExtractor != null) return readerModeExtractor
+        val context = try { com.drnishanth.novellib.NovelLibApplication.instance } catch (_: Exception) { null }
+        return context?.let { WebViewReaderModeExtractor(it) }
+    }
 
     /**
      * Determines whether a given URL matches a source definition.
@@ -237,7 +244,8 @@ class SourceDefinitionEngine(
         }
 
         // Fallback for dynamic AJAX chapter TOC on ScribbleHub
-        if (chapters.isEmpty() && (definition.id.equals("scribblehub", ignoreCase = true) || url.contains("scribblehub.com"))) {
+        val isScribbleHub = definition.id.equals("scribblehub", ignoreCase = true) || url.contains("scribblehub.com")
+        if (isScribbleHub && doc.selectFirst("#novellib-injected-toc") == null) {
             try {
                 val postId = doc.selectFirst("input#mypostid, input[name='mypostid']")?.attr("value")
                     ?: Regex("""/series/(\d+)""").find(url)?.groupValues?.get(1)
@@ -250,8 +258,10 @@ class SourceDefinitionEngine(
                     val ajaxReq = Request.Builder()
                         .url("https://www.scribblehub.com/wp-admin/admin-ajax.php")
                         .post(formBody)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1")
                         .header("Referer", url)
                         .header("X-Requested-With", "XMLHttpRequest")
+                        .header("Accept", "*/*")
                     try {
                         val cookieStr = android.webkit.CookieManager.getInstance().getCookie(url)
                         if (!cookieStr.isNullOrBlank()) ajaxReq.header("Cookie", cookieStr)
@@ -262,7 +272,11 @@ class SourceDefinitionEngine(
                         resp.close()
                         if (ajaxHtml.isNotBlank()) {
                             val ajaxDoc = Jsoup.parse(ajaxHtml, url)
+                            val prevCount = chapters.size
                             extractChaptersFromDoc(ajaxDoc, url)
+                            if (prevCount > 0 && chapters.size > prevCount) {
+                                // If AJAX releases were added, de-duplicate will keep unique
+                            }
                         }
                     } else {
                         resp.close()
@@ -272,7 +286,8 @@ class SourceDefinitionEngine(
         }
 
         // Fallback for dynamic AJAX chapter TOC on NovelUpdates
-        if (chapters.isEmpty() && (definition.id.equals("novelupdates", ignoreCase = true) || url.contains("novelupdates.com"))) {
+        val isNovelUpdates = definition.id.equals("novelupdates", ignoreCase = true) || url.contains("novelupdates.com")
+        if (isNovelUpdates && doc.selectFirst("#novellib-injected-nu-toc") == null) {
             try {
                 val postId = doc.selectFirst("input#mypostid, input[name='mypostid']")?.attr("value")
                     ?: Regex("""mypostid["\s:=]+(\d+)""").find(doc.html())?.groupValues?.get(1)
@@ -285,8 +300,10 @@ class SourceDefinitionEngine(
                     val ajaxReq = Request.Builder()
                         .url("https://www.novelupdates.com/wp-admin/admin-ajax.php")
                         .post(formBody)
+                        .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36 NovelLibrary/0.1")
                         .header("Referer", url)
                         .header("X-Requested-With", "XMLHttpRequest")
+                        .header("Accept", "*/*")
                     try {
                         val cookieStr = android.webkit.CookieManager.getInstance().getCookie(url)
                         if (!cookieStr.isNullOrBlank()) ajaxReq.header("Cookie", cookieStr)
@@ -297,7 +314,12 @@ class SourceDefinitionEngine(
                         resp.close()
                         if (ajaxHtml.isNotBlank()) {
                             val ajaxDoc = Jsoup.parse(ajaxHtml, url)
-                            extractChaptersFromDoc(ajaxDoc, url)
+                            val ajaxElements = ajaxDoc.select(definition.chapters.container)
+                            if (ajaxElements.isNotEmpty()) {
+                                // Prefer complete list from nd_getchapters over partial static page 1
+                                chapters.clear()
+                                extractChaptersFromDoc(ajaxDoc, url)
+                            }
                         }
                     } else {
                         resp.close()
@@ -306,14 +328,31 @@ class SourceDefinitionEngine(
             } catch (_: Exception) {}
         }
 
-        // De-duplicate by chapter URL and sort if numbers are valid
+        // De-duplicate by chapter URL and sort appropriately
         val distinctChapters = chapters.distinctBy { it.url }
-        val finalChapters = if (distinctChapters.size > 1 && distinctChapters.all { it.number > 0 }) {
-            val numbers = distinctChapters.map { it.number }
-            if (numbers.distinct().size == distinctChapters.size) {
+        val finalChapters = if (distinctChapters.size > 1) {
+            val parsedNumbers = distinctChapters.map { it.number }
+            val allPositive = parsedNumbers.all { it > 0 }
+            val allUnique = parsedNumbers.distinct().size == distinctChapters.size
+
+            if (allPositive && allUnique) {
+                // If every chapter has a unique positive number, sort ascending
                 distinctChapters.sortedBy { it.number }
             } else {
-                distinctChapters.mapIndexed { idx, item -> item.copy(number = idx + 1) }
+                // Check whether the document listed chapters newest-first (descending)
+                val isExplicitDesc = definition.chapters.order?.lowercase() == "desc" || definition.chapters.order?.lowercase() == "reverse"
+                val looksDescending = if (distinctChapters.size >= 2) {
+                    val firstNum = distinctChapters.first().number
+                    val lastNum = distinctChapters.last().number
+                    firstNum > lastNum && firstNum > 0 && lastNum > 0
+                } else false
+
+                val listToNumber = if (isExplicitDesc || looksDescending) {
+                    distinctChapters.reversed()
+                } else {
+                    distinctChapters
+                }
+                listToNumber.mapIndexed { idx, item -> item.copy(number = idx + 1) }
             }
         } else {
             distinctChapters.mapIndexed { idx, item -> item.copy(number = idx + 1) }
@@ -322,13 +361,21 @@ class SourceDefinitionEngine(
         Pair(novel, finalChapters)
     }
 
-    private fun parseChapterNumber(title: String, url: String): Int? {
-        val titleRegex = Regex("""(?i)\b(?:chapter|ch\.?)\s*(\d+)""")
+    fun parseChapterNumber(title: String, url: String): Int? {
+        // Matches: Chapter 1, Ch. 1, Ch 1, c1, c.1, c 1, v1c2, v2 c3, Vol. 1 Ch. 8, Episode 12, Ep. 3
+        val titleRegex = Regex("""(?i)(?:\b(?:vol(?:ume)?|v)\.?\s*\d+[\s_.-]*)?(?:chapter|chap|ch|c|episode|ep)\.?\s*(\d+)""")
         val titleMatch = titleRegex.find(title)
         if (titleMatch != null) {
             return titleMatch.groupValues[1].toIntOrNull()
         }
-        val urlRegex = Regex("""(?i)\bchapter-(\d+)\b""")
+        // Matches standalone number like "1", "12", "01" or starts with "1 - Title" or "1: Title"
+        val startNumberRegex = Regex("""^\s*(\d+)(?:[\s:.-]|$)""")
+        val startMatch = startNumberRegex.find(title)
+        if (startMatch != null) {
+            return startMatch.groupValues[1].toIntOrNull()
+        }
+        // URL matches: chapter-1, ch-1, c1, episode-1, etc.
+        val urlRegex = Regex("""(?i)\b(?:chapter|chap|ch|c|episode|ep)[-_]?(\d+)\b""")
         val urlMatch = urlRegex.find(url)
         if (urlMatch != null) {
             return urlMatch.groupValues[1].toIntOrNull()
@@ -366,6 +413,7 @@ class SourceDefinitionEngine(
 
         // If extraction failed or document was a challenge, and we used HTTP in auto mode, try WebView fallback
         val mode = definition.rendering?.mode?.lowercase() ?: "auto"
+        var webViewDoc: FetchedDocument? = null
         if (result !is ChapterExtractionResult.Success &&
             mode == "auto" &&
             fetchedDoc.fetchMethod == FetchMethod.HTTP &&
@@ -373,7 +421,7 @@ class SourceDefinitionEngine(
         ) {
             val context = try { com.drnishanth.novellib.NovelLibApplication.instance } catch (_: Exception) { null }
             if (context != null) {
-                val webViewDoc = WebViewDocumentFetcher.fetchDocumentDetailed(context, url, definition.rendering)
+                webViewDoc = WebViewDocumentFetcher.fetchDocumentDetailed(context, url, definition.rendering)
                 if (webViewDoc != null) {
                     val webViewResult = tryExtractFromDoc(webViewDoc, url, definition)
                     if (webViewResult is ChapterExtractionResult.Success) {
@@ -382,6 +430,46 @@ class SourceDefinitionEngine(
                         result = webViewResult
                     }
                 }
+            }
+        }
+
+        // Reader Mode fallback (Mozilla Readability on rendered DOM or static snapshot)
+        if (result !is ChapterExtractionResult.Success) {
+            val readerExtractor = getReaderModeExtractor()
+            if (readerExtractor != null) {
+                val candidateHtml = webViewDoc?.document?.outerHtml() ?: fetchedDoc.document.outerHtml()
+                val candidateBaseUrl = webViewDoc?.finalUrl ?: fetchedDoc.finalUrl
+                try {
+                    val readerResult = readerExtractor.extract(
+                        ReaderModeInput.HtmlSnapshot(
+                            html = candidateHtml,
+                            url = candidateBaseUrl
+                        )
+                    )
+                    if (readerResult.html != null &&
+                        (readerResult.confidence == ReaderModeConfidence.HIGH ||
+                         readerResult.confidence == ReaderModeConfidence.MEDIUM)
+                    ) {
+                        val sanitized = sanitizeHtml(readerResult.html, definition.chapter)
+                        val validation = ChapterContentValidator.validate(
+                            sanitizedHtml = sanitized,
+                            docTitle = readerResult.title ?: (webViewDoc ?: fetchedDoc).document.title(),
+                            fullDoc = (webViewDoc ?: fetchedDoc).document,
+                            rule = definition.chapter.validation
+                        )
+                        if (validation.valid) {
+                            return@withContext ChapterExtractionResult.Success(
+                                content = ScrapedChapterContent(
+                                    title = readerResult.title,
+                                    htmlContent = sanitized,
+                                    contentHash = sha256(sanitized)
+                                ),
+                                fetchMethod = FetchMethod.READER_MODE,
+                                usedFallback = true
+                            )
+                        }
+                    }
+                } catch (_: Exception) {}
             }
         }
 
@@ -614,7 +702,7 @@ class SourceDefinitionEngine(
     }
 
     private fun extractFromElement(element: Element, rule: SelectorRule, baseUrl: String): String? {
-        val targetElement = if (rule.selector.isEmpty() || rule.selector == ".") {
+        val targetElement = if (rule.selector.isEmpty() || rule.selector == "." || (try { element.`is`(rule.selector) } catch (_: Exception) { false })) {
             element
         } else {
             element.selectFirst(rule.selector) ?: element
